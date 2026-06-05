@@ -666,11 +666,11 @@ export default function HomePage() {
         "GIF to PNG",
         "PNG to ICO",
         "ICO to PNG",
-        "BMP to PNG"
+        "BMP to PNG",
         "PDF to JPG",
         "PDF to PNG",
-        "Image converter"
-        "image type convert"
+        "Image converter",
+        "image type convert",
         "pdf converter"
       ],
 
