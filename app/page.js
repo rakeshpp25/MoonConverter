@@ -366,7 +366,7 @@ export default function HomePage() {
               )}
             </div>
 
-            /* SECURE LABELED HOT-SWAP TRIGGER */
+            
             <label 
               htmlFor="workspaceFileInput" 
               style={{ 
