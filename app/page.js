@@ -235,7 +235,7 @@ export default function HomePage() {
       if (window['pdfjs-dist/build/pdf']) {
         runPdfExtraction();
       } else {
-        setConvertBtnText('Loading engine...');
+        setConvertBtnText('Converting...');
         
         if (!document.getElementById('pdfjs-cdn-script')) {
           // Injection script block for core global dependency matrix
