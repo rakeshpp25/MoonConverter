@@ -142,7 +142,7 @@ export default function HomePage() {
   const handleConversion = () => {
     if (!file) return;
     setConvertBtnText('Converting...');
-    setProgressWidth('30%');
+    setProgressWidth('20%');
 
     if (targetFormat === 'pdf') {
       const reader = new FileReader();
@@ -190,9 +190,76 @@ export default function HomePage() {
       };
       reader.readAsDataURL(file);
     } else if (incomingExtension === 'pdf') {
-      setErrorMessage('Document page extraction is processing in your active system channels.');
-      setConvertBtnText('Convert Now');
-      setProgressWidth('0%');
+      // --- LIVE 100% CLIENT-SIDE BROWSER PDF EXTRACTION SYSTEM ---
+      const runPdfExtraction = async () => {
+        try {
+          setProgressWidth('40%');
+          const arrayBuffer = await file.arrayBuffer();
+          
+          // Access globally loaded PDFJS instance context
+          const pdfjsLib = window['pdfjs-dist/build/pdf'];
+          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          
+          // Extract the first page for fast single conversion download configuration targeting
+          const page = await pdf.getPage(1);
+          const viewport = page.getViewport({ scale: 2.0 }); // 2.0 rendering multiplier ensures high definition crisp outputs
+          
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+          const ctx = canvas.getContext('2d');
+          
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          
+          setProgressWidth('70%');
+          await page.render({ canvasContext: ctx, viewport }).promise;
+          
+          let mimeType = `image/${targetFormat}`;
+          if (targetFormat === 'jpg') mimeType = 'image/jpeg';
+          
+          const outputDataUrl = canvas.toDataURL(mimeType, 0.92);
+          setDownloadUrl(outputDataUrl);
+          
+          setProgressWidth('100%');
+          setShowDownloadBtn(true);
+          setConvertBtnText('Convert Now');
+        } catch (error) {
+          console.error(error);
+          setErrorMessage('Failed to extract images from PDF client-side. Make sure the file is not encrypted.');
+          setProgressWidth('0%');
+          setConvertBtnText('Convert Now');
+        }
+      };
+
+      // Load PDFJS dependencies dynamically onto client-side window memory context
+      if (window['pdfjs-dist/build/pdf']) {
+        runPdfExtraction();
+      } else {
+        setConvertBtnText('Loading engine...');
+        
+        if (!document.getElementById('pdfjs-cdn-script')) {
+          // Injection script block for core global dependency matrix
+          const coreScript = document.createElement('script');
+          coreScript.id = 'pdfjs-cdn-script';
+          coreScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js';
+          document.body.appendChild(coreScript);
+
+          // Configure standard background worker context thread explicitly
+          coreScript.onload = () => {
+            window['pdfjs-dist/build/pdf'].GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+          };
+        }
+
+        setTimeout(() => {
+          if (window['pdfjs-dist/build/pdf']) {
+            runPdfExtraction();
+          } else {
+            setErrorMessage('Local processing engine setup timed out. Please try again.');
+            setProgressWidth('0%');
+            setConvertBtnText('Convert Now');
+          }
+        }, 1500);
+      }
     } else if (targetFormat === 'svg') {
       const reader = new FileReader();
       reader.onload = function (e) {
@@ -249,10 +316,10 @@ export default function HomePage() {
       <section className="hero-sec">
         <div className="container">
 <h1 className="hero-title" style={{ fontSize: '3.25rem', fontWeight: '800', color: '#1e1b4b', marginBottom: '1rem', letterSpacing: '-0.02em', lineHeight: '1.2' }}>
-  Convert Images Offline. <br /> Anywhere. Anytime.
+   Convert Images Offline. <br /> Anywhere. Anytime.
 </h1>
 <p className="hero-subtitle" style={{ color: '#64748b', maxWidth: '500px', margin: '0 auto 2.5rem auto', fontSize: '1.15rem', lineHeight: '1.6' }}>
-  Fast, secure, and ready whenever you are, even with slow internet, network issues, or no connection at all.
+   Fast, secure, and ready whenever you are, even with slow internet, network issues, or no connection at all.
 </p>        </div>
       </section>
 
