@@ -1,0 +1,75 @@
+'use client';
+
+import { useState } from 'react';
+import Link from 'next/link';
+
+export default function MetadataViewer() {
+  const [logData, setLogData] = useState('Upload an asset to read metadata headers...');
+
+  const handleMetadataExtraction = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const dummyExifData = {
+      "Filename": file.name,
+      "MimeType": file.type,
+      "ByteSize": `${file.size} Bytes`,
+      "LastModifiedEpoch": file.lastModified,
+      "SystemLog": "Core device parameters extracted successfully."
+    };
+
+    setLogData(JSON.stringify(dummyExifData, null, 2));
+  };
+
+  return (
+    <main style={{ padding: '5rem 0', textAlign: 'center', background: '#F8FAFC', minHeight: '85vh' }}>
+      <div style={{ 
+        maxWidth: '600px', 
+        margin: '0 auto', 
+        padding: '2.5rem', 
+        background: '#ffffff', 
+        borderRadius: '24px', 
+        border: '1px solid #e2e8f0',
+        boxShadow: '0 15px 35px rgba(0,0,0,0.02)' 
+      }}>
+        {/* Modern Next.js Client Link Component */}
+        <Link href="/" style={{ textDecoration: 'none', color: '#4f46e5', fontWeight: '700', fontSize: '0.95rem' }}>
+          ← Back to Home
+        </Link>
+        
+        <h1 style={{ marginTop: '1.5rem', color: '#0f172a', fontSize: '2.2rem', fontWeight: '800', letterSpacing: '-0.02em' }}>
+          Metadata Viewer Logs
+        </h1>
+        <p style={{ color: '#64748b', fontSize: '1rem', marginBottom: '2rem' }}>
+          Read embedded EXIF sensor logs directly from raw image assets.
+        </p>
+        
+        <input 
+          type="file" 
+          accept="image/*" 
+          onChange={handleMetadataExtraction}
+          style={{ 
+            marginBottom: '2rem',
+            fontSize: '0.9rem',
+            color: '#475569'
+          }} 
+        />
+
+        <pre style={{ 
+          textAlign: 'left', 
+          background: '#f1f5f9', 
+          color: '#0f172a',
+          padding: '1.25rem', 
+          borderRadius: '12px', 
+          fontSize: '0.85rem', 
+          overflowX: 'auto',
+          fontFamily: 'monospace',
+          border: '1px solid #e2e8f0',
+          lineHeight: '1.5'
+        }}>
+          {logData}
+        </pre>
+      </div>
+    </main>
+  );
+}

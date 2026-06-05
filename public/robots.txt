@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Allow: /convert/
+
+Sitemap: https://moonconverter.com/sitemap.xml

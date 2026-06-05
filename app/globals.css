@@ -1,0 +1,859 @@
+/* ==========================================================================
+   MoonConverter Design System & Core Styles
+   ========================================================================== */
+
+:root {
+  /* Color Palette */
+  --primary: #4F46E5;
+  --primary-hover: #4338CA;
+  --secondary: #7C3AED;
+  --accent: #06B6D4;
+  --background: #F8FAFC;
+  --card-bg: #FFFFFF;
+  --text: #0F172A;
+  --text-muted: #64748B;
+  --border: #E2E8F0;
+  --success: #10B981;
+  --error: #EF4444;
+  
+  /* Typography */
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  
+  /* Shadows & Radius */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --radius-sm: 0.375rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  
+  /* Layout Layout Settings */
+  --max-width: 1280px;
+  --header-height: 72px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--background);
+  color: var(--text);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button, input {
+  font-family: inherit;
+}
+
+/* --- Layout Containers --- */
+.container {
+  width: 100%;
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+.section {
+  padding: 5rem 0;
+}
+
+/* --- Sticky Header --- */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  height: var(--header-height);
+}
+
+.header-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 100%;
+}
+
+.logo-link {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: var(--text);
+}
+
+.nav-menu {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  list-style: none;
+}
+
+.nav-link {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  transition: color 0.2s ease;
+}
+
+.nav-link:hover, .nav-link.active {
+  color: var(--primary);
+}
+
+.nav-cta {
+  background: var(--primary);
+  color: white !important;
+  padding: 0.5rem 1.25rem;
+  border-radius: var(--radius-md);
+  transition: background 0.2s ease;
+}
+
+.nav-cta:hover {
+  background: var(--primary-hover);
+}
+
+.burger-btn {
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem;
+}
+
+/* --- Hero Architecture --- */
+.hero-sec {
+  text-align: center;
+  padding: 6rem 0 4rem 0;
+  background: radial-gradient(100% 100% at 50% 0%, rgba(79, 70, 229, 0.05) 0%, rgba(248, 250, 252, 0) 100%);
+}
+
+.hero-sec h1 {
+  font-size: 3.5rem;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.04em;
+  margin-bottom: 1.5rem;
+  background: linear-gradient(135deg, var(--text) 30%, var(--secondary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.hero-sec p {
+  font-size: 1.25rem;
+  color: var(--text-muted);
+  max-width: 42rem;
+  margin: 0 auto 2.5rem auto;
+}
+
+.btn-group {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.875rem 1.75rem;
+  font-weight: 600;
+  font-size: 1rem;
+  border-radius: var(--radius-md);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  border: none;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: white;
+  box-shadow: var(--shadow-sm);
+}
+
+.btn-primary:hover {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: white;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn-secondary:hover {
+  background: var(--background);
+  border-color: #CBD5E1;
+}
+
+/* --- Search Engine Section --- */
+.search-sec {
+  padding: 0 0 4rem 0;
+}
+
+.search-wrapper {
+  max-width: 36rem;
+  margin: 0 auto;
+  position: relative;
+}
+
+.search-input-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 1.25rem;
+  pointer-events: none;
+  color: var(--text-muted);
+}
+
+.search-input {
+  width: 100%;
+  padding: 1.125rem 1.25rem 1.125rem 3.25rem;
+  font-size: 1.125rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card-bg);
+  box-shadow: var(--shadow-md);
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.search-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1), var(--shadow-lg);
+}
+
+.suggestions-box {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 0.5rem;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  max-height: 280px;
+  overflow-y: auto;
+  z-index: 50;
+  display: none;
+}
+
+.suggestion-item {
+  padding: 0.875rem 1.25rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 500;
+  transition: background 0.15s ease;
+}
+
+.suggestion-item:hover, .suggestion-item.highlighted {
+  background: #F1F5F9;
+  color: var(--primary);
+}
+
+.suggestion-match {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  background: #F1F5F9;
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+}
+
+/* --- Card Grid Core Systems --- */
+.section-title {
+  text-align: center;
+  font-size: 2.25rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin-bottom: 1rem;
+}
+
+.section-subtitle {
+  text-align: center;
+  color: var(--text-muted);
+  max-width: 42rem;
+  margin: 0 auto 3rem auto;
+  font-size: 1.125rem;
+}
+
+.grid-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1.5rem;
+}
+
+.converter-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 1.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: var(--shadow-sm);
+}
+
+.converter-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--primary);
+}
+
+.card-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.card-desc {
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  margin-bottom: 1.25rem;
+}
+
+.card-link {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* --- Format Badges Section --- */
+.format-flex {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1rem;
+  max-width: 52rem;
+  margin: 0 auto;
+}
+
+.format-badge {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--radius-md);
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
+}
+
+.format-badge:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  transform: scale(1.05);
+}
+
+/* --- Features Engine Section --- */
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 2rem;
+}
+
+.feature-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 2.5rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.feature-icon-box {
+  width: 48px;
+  height: 48px;
+  background: rgba(79, 70, 229, 0.08);
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+  margin-bottom: 1.5rem;
+}
+
+.feature-card h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 0.75rem;
+}
+
+.feature-card p {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+/* --- Breadcrumbs --- */
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  list-style: none;
+  padding: 1.5rem 0 0 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.breadcrumb-item a {
+  color: var(--text-muted);
+}
+
+.breadcrumb-item a:hover {
+  color: var(--primary);
+}
+
+.breadcrumb-item.active {
+  color: var(--text);
+  pointer-events: none;
+}
+
+.breadcrumb-separator {
+  color: #94A3B8;
+}
+
+/* --- Operational App Workspace (Dropzone Layout) --- */
+.app-container {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  padding: 2.5rem;
+  margin-bottom: 4rem;
+}
+
+.dropzone {
+  border: 2px dashed #CBD5E1;
+  border-radius: var(--radius-lg);
+  padding: 4rem 2rem;
+  text-align: center;
+  background: #F8FAFC;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.dropzone.dragover {
+  border-color: var(--primary);
+  background: rgba(79, 70, 229, 0.03);
+}
+
+.dropzone-icon {
+  color: var(--text-muted);
+  margin-bottom: 1.25rem;
+}
+
+.dropzone-text h3 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.dropzone-text p {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.file-input-hidden {
+  display: none;
+}
+
+/* --- Processing Framework Viewports --- */
+.workspace-view {
+  display: none;
+  margin-top: 2rem;
+}
+
+.preview-grid {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  background: #F1F5F9;
+  padding: 1.25rem;
+  border-radius: var(--radius-md);
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--border);
+}
+
+.preview-thumb-container {
+  width: 80px;
+  height: 80px;
+  background: #E2E8F0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.preview-details {
+  flex-grow: 1;
+}
+
+.preview-filename {
+  font-weight: 700;
+  font-size: 1rem;
+  word-break: break-all;
+}
+
+.preview-meta {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.remove-btn {
+  background: none;
+  border: none;
+  color: var(--error);
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 50%;
+  transition: background 0.2s ease;
+}
+
+.remove-btn:hover {
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.progress-bar-container {
+  height: 6px;
+  background: #E2E8F0;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+  display: none;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--secondary));
+  width: 0%;
+  transition: width 0.1s linear;
+}
+
+.action-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+}
+
+/* --- UI State Framework Elements --- */
+.notification-banner {
+  padding: 1rem 1.25rem;
+  border-radius: var(--radius-md);
+  margin-bottom: 1.5rem;
+  display: none;
+  font-weight: 500;
+  font-size: 0.95rem;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.notification-banner.success {
+  display: flex;
+  background: #ECFDF5;
+  color: #065F46;
+  border: 1px solid #A7F3D0;
+}
+
+.notification-banner.error {
+  display: flex;
+  background: #FEF2F2;
+  color: #991B1B;
+  border: 1px solid #FCA5A5;
+}
+
+/* --- Deep Knowledge SEO Sections --- */
+.editorial-sec {
+  background: white;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.editorial-layout {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.editorial-layout h2 {
+  font-size: 1.75rem;
+  font-weight: 800;
+  margin: 2.5rem 0 1rem 0;
+  letter-spacing: -0.02em;
+}
+
+.editorial-layout h2:first-of-type {
+  margin-top: 0;
+}
+
+.editorial-layout p {
+  color: #334155;
+  margin-bottom: 1.25rem;
+  font-size: 1.05rem;
+}
+
+/* --- Unified Global Footer --- */
+.footer {
+  background: #0F172A;
+  color: #94A3B8;
+  padding: 4rem 0 2rem 0;
+  border-top: 1px solid #1E293B;
+}
+
+.footer-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #1E293B;
+  padding-bottom: 2.5rem;
+  margin-bottom: 2rem;
+}
+
+.footer-logo {
+  color: white;
+}
+
+.footer-nav {
+  display: flex;
+  gap: 2rem;
+  list-style: none;
+}
+
+.footer-link {
+  font-size: 0.9rem;
+  transition: color 0.2s ease;
+}
+
+.footer-link:hover {
+  color: white;
+}
+
+.footer-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+}
+
+
+/* 1. Make sure the container card is the anchor point */
+.popular-converters .card, 
+.advanced-suite .card,
+[class*="-card"] { 
+  position: relative; 
+}
+
+/* 2. Stretch the link to cover the entire card area */
+.card-link::after,
+.launch-link::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+  z-index: 1;
+}
+
+/* --- MOONCONVERTER MOBILE & TABLET LAYOUT ENGINE --- */
+@media (max-width: 768px) {
+  
+  /* 1. Reset container to allow custom element spacing */
+  .header-container {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0 1rem;
+  }
+
+  /* 2. Style the hamburger icon and keep its native width */
+  #burgerBtn, .burger-btn {
+    display: block !important;
+    background: none;
+    border: none;
+    color: currentColor;
+    cursor: pointer;
+    padding: 0.5rem 0.75rem 0.5rem 0; /* Clear right padding to reduce initial gap */
+    
+  }
+
+  /* 3. Pull the logo close to the hamburger with a controlled gap */
+  .logo-link {
+    display: flex !important;
+    align-items: left !important;
+    /* order: 2 !important; */
+    text-decoration: none;
+    margin-left: 0.5rem; /* This sets the exact small gap between hamburger and logo text */
+  }
+
+  /* 4. Force the navigation wrapper to push the feedback button to the far right edge */
+  .nav-menu {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    position: static !important;
+    padding: 0 !important;
+    order: 3 !important;
+    margin-left: auto !important; /* The secret sauce: pushes everything after it to the far right */
+  }
+
+  /* 5. Hide generic desktop links */
+  .nav-menu .mobile-hide {
+    display: none !important;
+  }
+
+  /* 6. Keep the Feedback CTA button styled beautifully */
+  .nav-menu .mobile-show, 
+  .nav-menu .nav-cta {
+    display: inline-block !important;
+    padding: 0.4rem 0.9rem !important;
+    font-size: 0.85rem !important;
+    margin: 0 !important;
+  }
+
+  /* 7. Dropdown setup */
+  .mobile-dropdown {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* --- FIXED MOBILE 2-COLUMN FOOTER --- */
+  .footer-top {
+    display: flex !important;
+    flex-direction: row !important; /* Force layout items to stay side-by-side on one row */
+    justify-content: space-between !important; /* Push logo to the left, links to the right */
+    align-items: flex-start !important;
+    width: 100% !important;
+    box-sizing: border-box;
+    padding-bottom: 2rem !important;
+    gap: 1rem !important;
+  }
+
+  /* 1. Brand text logo locked on the far-left edge */
+  .footer-logo {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    text-align: left !important;
+    flex: 1 !important;
+    margin: 0 !important;
+  }
+
+  /* 2. Navigation list wrapper stacked vertically on the far-right edge */
+  .footer-nav {
+    display: flex !important;
+    flex-direction: column !important; /* Stack links vertically */
+    align-items: flex-end !important; /* Right-align the text lines beautifully */
+    text-align: right !important;
+    gap: 0.85rem !important; /* Comfortable spacing to prevent accidental mis-taps */
+    padding: 0 !important;
+    margin: 0 !important;
+    list-style: none !important;
+    flex: 1 !important;
+  }
+
+  /* 3. Bottom baseline section layout stack */
+  .footer-bottom {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    text-align: left !important;
+    gap: 0.5rem !important;
+    margin-top: 1.5rem !important;
+    border-top: 1px solid rgba(226, 232, 240, 0.1);
+    padding-top: 1.5rem !important;
+    width: 100% !important;
+  }
+}
+
+
+/* --- MOONCONVERTER MOBILE & TABLET LAYOUT ENGINE --- */
+@media (max-width: 768px) {
+  
+  /* 1. Make the hamburger menu button show up on small screens */
+  #burgerBtn, .burger-btn {
+    display: block !important;
+  }
+
+  /* 2. Hide the generic desktop nav links so they don't crowd the header */
+  .nav-menu .mobile-hide {
+    display: none !important;
+  }
+
+  /* 3. Keep the Feedback button visible and styled perfectly next to the logo */
+  .nav-menu .mobile-show {
+    display: inline-block !important;
+    padding: 0.4rem 0.9rem !important;
+    font-size: 0.85rem !important;
+    margin-right: 0.5rem;
+  }
+
+  /* 4. Keep the logo, feedback button, and hamburger icon all on one clean row */
+  .header-container {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  /* 5. Force the navigation menu container wrapper to stay flat */
+  .nav-menu {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    position: static !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+}
+
+/* --- SASS-GRADE BUTTON PROCESSING PULSE BLOCKS --- */
+@keyframes buttonPulseStaging {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+.processing-pulse {
+  animation: buttonPulseStaging 1.4s infinite ease-in-out;
+  letter-spacing: 0.05em;
+}

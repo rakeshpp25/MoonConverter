@@ -1,0 +1,16 @@
+{
+  "short_name": "MoonConverter",
+  "name": "MoonConverter Premium Image Transformation Platform",
+  "icons": [
+    {
+      "src": "/images/logo.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#F8FAFC",
+  "theme_color": "#4F46E5",
+  "display": "standalone",
+  "orientation": "portrait"
+}
