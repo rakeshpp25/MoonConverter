@@ -616,6 +616,82 @@ export default function HomePage() {
       </section>
 
       <canvas ref={canvasRef} style={{ display: 'none' }}></canvas>
+      <script
+  type="application/ld+json"
+  dangerouslySetInnerHTML={{
+    __html: JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+
+      name: "MoonConverter",
+      alternateName: "Moon Converter",
+
+      url: "https://moonconverter.com",
+
+      description:
+        "Free offline image and PDF converter. Convert JPG, PNG, WebP, SVG, AVIF, HEIC, GIF, BMP, ICO, TIFF and PDF files directly in your browser without uploading files.",
+
+      applicationCategory: "UtilitiesApplication",
+
+      operatingSystem: "Web Browser",
+
+      browserRequirements:
+        "Requires JavaScript and a modern HTML5-compatible browser.",
+
+      image: "https://moonconverter.com/og-image.png",
+
+      screenshot: "https://moonconverter.com/og-image.png",
+
+      softwareVersion: "1.0",
+
+      featureList: [
+        "Offline image conversion",
+        "Offline PDF conversion",
+        "No file uploads",
+        "Unlimited conversions",
+        "Privacy-focused processing",
+        "Batch conversion",
+        "JPG to PNG",
+        "PNG to JPG",
+        "WebP conversion",
+        "SVG conversion",
+        "PDF to Image",
+        "Image to PDF"
+        "JPG to AVIF",
+        "AVIF to JPG",
+        "HEIC to JPG",
+        "SVG to PNG",
+        "PNG to SVG",
+        "TIFF to JPG",
+        "GIF to PNG",
+        "PNG to ICO",
+        "ICO to PNG",
+        "BMP to PNG"
+        "PDF to JPG",
+        "PDF to PNG",
+        "Image converter"
+        "image type convert"
+        "pdf converter"
+      ],
+
+      offers: {
+        "@type": "Offer",
+        price: "0",
+        priceCurrency: "USD"
+      },
+
+      creator: {
+        "@type": "Organization",
+        name: "MoonConverter"
+      },
+
+      publisher: {
+        "@type": "Organization",
+        name: "MoonConverter"
+      }
+    })
+  }}
+/>
     </>
   );
 }
