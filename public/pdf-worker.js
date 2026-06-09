@@ -1,102 +1,140 @@
 // public/pdf-worker.js
 
-// Import pdf-lib safely from a highly optimized delivery mirror
 importScripts('https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js');
 
 /**
- * 🔒 MoonConverter High-Speed Local PDF Worker Engine
- * Uses optimized single-pass array chunks to prevent worker freezes.
+ * 🔒 MoonConverter Precision Local PDF Worker Engine
+ * Runs an iterative binary search loop to match manual KB size constraints closely.
  */
 self.onmessage = async function (e) {
   const { fileBuffer, mode, profile, targetSizeKb } = e.data;
 
   try {
-    self.postMessage({ status: 'processing', pass: 1, currentSizeEstimate: 'Opening secure data sandbox...' });
+    self.postMessage({ status: 'processing', pass: 1, currentSizeEstimate: 'Initializing precision document sandbox...' });
 
-    // 1. Instantly parse the document structure
-    const pdfDoc = await PDFLib.PDFDocument.load(fileBuffer, { 
-      updateMetadata: false, // Prevents slow parsing of corrupted data chunks
-      capNumbers: true 
-    });
-    
-    let targetQuality = 0.60;
-    if (mode === 'target') {
-      const inputSizeKb = fileBuffer.byteLength / 1024;
-      const ratio = targetSizeKb / inputSizeKb;
-      targetQuality = ratio < 0.3 ? 0.25 : ratio < 0.6 ? 0.45 : 0.70;
-    } else {
-      targetQuality = profile === 'maximum' ? 0.30 : profile === 'low' ? 0.85 : 0.60;
+    // 1. Load the original base byte array
+    const originalPdfDoc = await PDFLib.PDFDocument.load(fileBuffer, { updateMetadata: false, capNumbers: true });
+    const originalSizeKb = fileBuffer.byteLength / 1024;
+
+    // Fast-track skip: If file is already smaller than target, run a light cleanup pass
+    if (mode === 'target' && originalSizeKb <= targetSizeKb) {
+      const finalBytes = await originalPdfDoc.save({ useObjectStreams: true });
+      self.postMessage({ status: 'success', finalBuffer: finalBytes.buffer, finalSizeKb: (finalBytes.length / 1024).toFixed(1) });
+      return;
     }
 
-    self.postMessage({ status: 'processing', pass: 2, currentSizeEstimate: 'Scanning object streams...' });
+    // 2. RUN ITERATIVE BINARY LOOP IF IN TARGET MODE
+    let finalBuffer = fileBuffer;
+    let finalSizeKb = originalSizeKb;
 
-    // 2. ULTRA-FAST SINGLE PASS OBJECT STRIPPING
-    const context = pdfDoc.context;
-    const indirectObjects = context.indirectObjects;
+    if (mode === 'target') {
+      let lowQuality = 0.15;
+      let highQuality = 0.90;
+      let bestQualityMatched = 0.45;
+      let currentPass = 1;
+      const maxPasses = 4; // 4 quick loops prevent browser lag while finding a tight match
 
-    for (const [ref, obj] of indirectObjects.entries()) {
-      if (obj instanceof PDFLib.PDFStream && obj.dict) {
-        const subtype = obj.dict.get(PDFLib.PDFName.of('Subtype'));
+      while (currentPass <= maxPasses) {
+        const testQuality = (lowQuality + highQuality) / 2;
         
-        if (subtype === PDFLib.PDFName.of('Image')) {
-          try {
-            // Fast skip if the image data chunk is too microscopic to save significant space
-            if (obj.contents && obj.contents.length < 50 * 1024) continue;
+        self.postMessage({ 
+          status: 'processing', 
+          pass: currentPass, 
+          currentSizeEstimate: `Refining layout matrix balance (Pass ${currentPass}/${maxPasses})...` 
+        });
 
-            const originalBytes = obj.contents;
-            const imageBlob = new Blob([originalBytes]);
-            
-            // Generate offscreen bitmap data rapidly
-            const imgBitmap = await self.createImageBitmap(imageBlob);
-            
-            // Downsample dimensions by 15% to immediately reduce memory processing load
-            const scaleFactor = targetQuality < 0.4 ? 0.75 : 0.90;
-            const width = Math.floor(imgBitmap.width * scaleFactor);
-            const height = Math.floor(imgBitmap.height * scaleFactor);
-            
-            const offscreenCanvas = new OffscreenCanvas(width, height);
-            const canvasCtx = offscreenCanvas.getContext('2d');
-            
-            canvasCtx.drawImage(imgBitmap, 0, 0, width, height);
-            
-            const optimizedBlob = await offscreenCanvas.convertToBlob({
-              type: 'image/jpeg',
-              quality: targetQuality
-            });
-            
-            const optimizedBytes = new Uint8Array(await optimizedBlob.arrayBuffer());
-            
-            // Overwrite memory addresses
-            obj.contents = optimizedBytes;
-            obj.dict.set(PDFLib.PDFName.of('Length'), PDFLib.PDFNumber.of(optimizedBytes.length));
-            obj.dict.set(PDFLib.PDFName.of('Filter'), PDFLib.PDFName.of('DCTDecode'));
-            
-            imgBitmap.close();
-          } catch (imgErr) {
-            continue; // Keep moving if an individual object block is locked
+        // Load a fresh, un-mutated copy of the document for this pass
+        const testDoc = await PDFLib.PDFDocument.load(fileBuffer, { updateMetadata: false, capNumbers: true });
+        const indirectObjects = testDoc.context.indirectObjects;
+
+        // Compress internal image objects at this specific test quality
+        for (const [ref, obj] of indirectObjects.entries()) {
+          if (obj instanceof PDFLib.PDFStream && obj.dict) {
+            const subtype = obj.dict.get(PDFLib.PDFName.of('Subtype'));
+            if (subtype === PDFLib.PDFName.of('Image')) {
+              try {
+                const imgBlob = new Blob([obj.contents]);
+                const imgBitmap = await self.createImageBitmap(imgBlob);
+                
+                // Adaptive slight dimension scaling to help hit aggressive targets smoothly
+                const dimensionScale = testQuality < 0.35 ? 0.80 : 0.95;
+                const w = Math.floor(imgBitmap.width * dimensionScale);
+                const h = Math.floor(imgBitmap.height * dimensionScale);
+
+                const offscreenCanvas = new OffscreenCanvas(w, h);
+                const canvasCtx = offscreenCanvas.getContext('2d');
+                canvasCtx.drawImage(imgBitmap, 0, 0, w, h);
+                
+                const optimizedBlob = await offscreenCanvas.convertToBlob({ type: 'image/jpeg', quality: testQuality });
+                const optimizedBytes = new Uint8Array(await optimizedBlob.arrayBuffer());
+                
+                obj.contents = optimizedBytes;
+                obj.dict.set(PDFLib.PDFName.of('Length'), PDFLib.PDFNumber.of(optimizedBytes.length));
+                obj.dict.set(PDFLib.PDFName.of('Filter'), PDFLib.PDFName.of('DCTDecode'));
+                
+                imgBitmap.close();
+              } catch (innerErr) {
+                continue;
+              }
+            }
+          }
+        }
+
+        // Clean meta parameters on this pass
+        testDoc.setTitle(''); testDoc.setAuthor(''); testDoc.setSubject(''); testDoc.setCreator(''); testDoc.setProducer('');
+
+        const testBytes = await testDoc.save({ useObjectStreams: true, addIndependentObjects: false });
+        const testSizeKb = testBytes.length / 1024;
+
+        // Evaluate sizing limits
+        if (testSizeKb <= targetSizeKb) {
+          // It fits under the target ceiling! Save this configuration as our current winner
+          finalBuffer = testBytes.buffer;
+          finalSizeKb = testSizeKb;
+          bestQualityMatched = testQuality;
+          lowQuality = testQuality; // Try increasing quality to see if we can get closer to 100KB
+        } else {
+          highQuality = testQuality; // Still too heavy, drop top boundaries down
+        }
+
+        currentPass++;
+      }
+    } 
+    // PROFILE MODE FALLBACK
+    else {
+      self.postMessage({ status: 'processing', pass: 2, currentSizeEstimate: 'Applying profile optimization values...' });
+      const profileQuality = profile === 'maximum' ? 0.30 : profile === 'low' ? 0.85 : 0.60;
+      const indirectObjects = originalPdfDoc.context.indirectObjects;
+
+      for (const [ref, obj] of indirectObjects.entries()) {
+        if (obj instanceof PDFLib.PDFStream && obj.dict) {
+          const subtype = obj.dict.get(PDFLib.PDFName.of('Subtype'));
+          if (subtype === PDFLib.PDFName.of('Image')) {
+            try {
+              const imgBlob = new Blob([obj.contents]);
+              const imgBitmap = await self.createImageBitmap(imgBlob);
+              const offscreenCanvas = new OffscreenCanvas(imgBitmap.width, imgBitmap.height);
+              const canvasCtx = offscreenCanvas.getContext('2d');
+              canvasCtx.drawImage(imgBitmap, 0, 0);
+              
+              const optimizedBlob = await offscreenCanvas.convertToBlob({ type: 'image/jpeg', quality: profileQuality });
+              const optimizedBytes = new Uint8Array(await optimizedBlob.arrayBuffer());
+              
+              obj.contents = optimizedBytes;
+              obj.dict.set(PDFLib.PDFName.of('Length'), PDFLib.PDFNumber.of(optimizedBytes.length));
+              obj.dict.set(PDFLib.PDFName.of('Filter'), PDFLib.PDFName.of('DCTDecode'));
+              imgBitmap.close();
+            } catch (e) { continue; }
           }
         }
       }
+      originalPdfDoc.setTitle(''); originalPdfDoc.setAuthor(''); originalPdfDoc.setSubject(''); originalPdfDoc.setCreator(''); originalPdfDoc.setProducer('');
+      const finalBytes = await originalPdfDoc.save({ useObjectStreams: true, addIndependentObjects: false });
+      finalBuffer = finalBytes.buffer;
+      finalSizeKb = finalBytes.length / 1024;
     }
 
-    self.postMessage({ status: 'processing', pass: 3, currentSizeEstimate: 'Stripping layout tracking metadata...' });
-
-    // 3. Clear document tracker history weights
-    pdfDoc.setTitle('');
-    pdfDoc.setAuthor('');
-    pdfDoc.setSubject('');
-    pdfDoc.setCreator('');
-    pdfDoc.setProducer('');
-
-    // 4. Save using linear stream deflating
-    const finalDocumentBytes = await pdfDoc.save({
-      useObjectStreams: true,
-      addIndependentObjects: false
-    });
-
-    const finalBuffer = finalDocumentBytes.buffer;
-    const finalSizeKb = finalBuffer.byteLength / 1024;
-
+    // Return the closest matching payload configuration
     self.postMessage({
       status: 'success',
       finalBuffer: finalBuffer,
