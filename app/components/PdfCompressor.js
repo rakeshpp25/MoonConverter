@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 export default function PdfCompressor() {
   // --- LAYER STATE STEP MANAGER ---
@@ -12,12 +12,14 @@ export default function PdfCompressor() {
   const [fileDetails, setFileDetails] = useState({ name: '', sizeKb: 0 });
 
   // --- UI CONTROLLER STATES ---
+  const [compressionMode, setCompressionMode] = useState('target'); // 'target' or 'profile'
   const [optimizationProfile, setOptimizationProfile] = useState('recommended'); 
-  // Profiles: 'recommended' (Balanced compression), 'maximum' (High compression, lower image DPI), 'low' (Lossless metadata stripping)
-
+  const [manualTargetSize, setManualTargetSize] = useState('500'); // Default target 500 KB for PDFs
+  
   // --- PROCESSING ENGINE STATES ---
   const [processingPass, setProcessingPass] = useState(0);
   const [liveSizeEstimate, setLiveSizeEstimate] = useState('');
+  const [clarityForecast, setClarityForecast] = useState({ text: 'High Clarity', color: '#10b981' });
   const [errorMessage, setErrorMessage] = useState('');
 
   // --- DOWNLOAD OUTPUT STATES ---
@@ -27,12 +29,34 @@ export default function PdfCompressor() {
   const fileInputRef = useRef(null);
   const workerRef = useRef(null);
 
+  // --- 🔥 LOGIC: REAL-TIME CLARITY FORECAST Engine for Documents ---
+  useEffect(() => {
+    if (!selectedFile || compressionMode !== 'target') return;
+
+    const originalSizeKb = fileDetails.sizeKb;
+    const requestedSizeKb = parseFloat(manualTargetSize) || 0;
+
+    if (requestedSizeKb <= 0) {
+      setClarityForecast({ text: 'Invalid Target Size', color: '#ef4444' });
+      return;
+    }
+
+    const reductionRatio = requestedSizeKb / originalSizeKb;
+
+    if (reductionRatio >= 0.6) {
+      setClarityForecast({ text: '💎 Razor Sharp (Text vectors & embedded web fonts fully preserved)', color: '#10b981' });
+    } else if (reductionRatio >= 0.25) {
+      setClarityForecast({ text: '⚡ Optimized Balance (Ideal for email attachments and job portals)', color: '#f59e0b' });
+    } else {
+      setClarityForecast({ text: '⚠️ Heavy Compression (Flattened scannable image layers may look blurry)', color: '#ef4444' });
+    }
+  }, [manualTargetSize, selectedFile, compressionMode, fileDetails.sizeKb]);
+
   // --- HANDLE INCOMING FILE ---
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
 
-      // Safety guardrail for massive PDF documents to protect client browser heap limits
       if (file.size > 50 * 1024 * 1024) {
         setErrorMessage('To protect browser stability, PDF documents are capped at 50MB.');
         return;
@@ -52,19 +76,22 @@ export default function PdfCompressor() {
   const triggerCompression = async () => {
     if (!selectedFile) return;
 
-    // 🟢 CRITICAL CACHE BREAK 1: Kill existing active thread instances instantly
+    // 🟢 STATE LOCK: Secure explicit integer copy before React loops can alter text configurations
+    const lockedTargetSize = Math.floor(parseFloat(manualTargetSize)) || 500;
+
+    // CRITICAL CACHE BREAK 1: Kill existing active thread instances instantly
     if (workerRef.current) {
       workerRef.current.terminate();
       workerRef.current = null;
     }
 
-    // 🟢 CRITICAL CACHE BREAK 2: Explicitly revoke previous PDF Blob URLs to free up RAM
+    // CRITICAL CACHE BREAK 2: Explicitly revoke previous PDF Blob URLs to free up RAM
     if (compressedDownloadUrl) {
       URL.revokeObjectURL(compressedDownloadUrl);
       setCompressedDownloadUrl('');
     }
 
-    // 🟢 CRITICAL CACHE BREAK 3: Clean state metrics before switching to loading layout view
+    // CRITICAL CACHE BREAK 3: Clean state metrics before switching to loading layout view
     setOutputDetails({ sizeKb: 0, compressionRatio: 0 });
     setLiveSizeEstimate('');
 
@@ -81,7 +108,9 @@ export default function PdfCompressor() {
     workerRef.current.postMessage({
       fileBuffer: fileArrayBuffer,
       fileName: selectedFile.name,
-      profile: optimizationProfile
+      mode: compressionMode,
+      profile: optimizationProfile,
+      targetSizeKb: lockedTargetSize
     });
 
     workerRef.current.onmessage = function (e) {
@@ -106,7 +135,7 @@ export default function PdfCompressor() {
         });
         setCompressedDownloadUrl(downloadLinkUrl);
 
-        // Micro-task queue wrapper layout guard
+        // Micro-task queue wrapper layout guard to isolate view change threads
         setTimeout(() => {
           setActiveStep('success');
         }, 40);
@@ -134,6 +163,8 @@ export default function PdfCompressor() {
     setFileDetails({ name: '', sizeKb: 0 });
     setCompressedDownloadUrl('');
     setOptimizationProfile('recommended');
+    setManualTargetSize('500');
+    setCompressionMode('target');
     setActiveStep('setup');
   };
 
@@ -176,19 +207,63 @@ export default function PdfCompressor() {
             </div>
           )}
 
-          {/* DYNAMIC PROFILE SELECTOR PANEL */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            <label style={{ fontSize: '0.85rem', fontWeight: '700', color: '#475569' }}>Optimization Processing Profile:</label>
-            <select 
-              value={optimizationProfile} 
-              onChange={(e) => setOptimizationProfile(e.target.value)}
-              style={{ width: '100%', padding: '0.75rem 0.85rem', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '0.95rem', fontWeight: '700', outline: 'none', color: '#0f172a', background: '#ffffff', cursor: 'pointer' }}
-            >
-              <option value="recommended">Recommended Mode (Isolate Text & Keep Razor Sharp)</option>
-              <option value="maximum">Maximum Downsample Crunch (Compress Heavy Image Scan Layers)</option>
-              <option value="low">Low Optimization (Lossless Structural Deflate & Metadata Scrub)</option>
-            </select>
+          {/* INTERACTIVE MODE TOGGLE SWITCH SELECTOR */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', background: '#f1f5f9', padding: '0.35rem', borderRadius: '12px' }}>
+            <button type="button" onClick={() => setCompressionMode('target')} style={{ border: 'none', padding: '0.6rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer', background: compressionMode === 'target' ? '#ffffff' : 'transparent', color: compressionMode === 'target' ? '#1e1b4b' : '#64748b', boxShadow: compressionMode === 'target' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none', transition: 'all 0.15s' }}>
+              🎯 Target Exact Size
+            </button>
+            <button type="button" onClick={() => setCompressionMode('profile')} style={{ border: 'none', padding: '0.6rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer', background: compressionMode === 'profile' ? '#ffffff' : 'transparent', color: compressionMode === 'profile' ? '#1e1b4b' : '#64748b', boxShadow: compressionMode === 'profile' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none', transition: 'all 0.15s' }}>
+              ⚙️ Custom Profiles
+            </button>
           </div>
+
+          {/* --- CONFIGURATION FIELDS PORTS --- */}
+          {compressionMode === 'profile' ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <label style={{ fontSize: '0.85rem', fontWeight: '700', color: '#475569' }}>Optimization Processing Profile:</label>
+              <select 
+                value={optimizationProfile} 
+                onChange={(e) => setOptimizationProfile(e.target.value)}
+                style={{ width: '100%', padding: '0.75rem 0.85rem', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '0.95rem', fontWeight: '700', outline: 'none', color: '#0f172a', background: '#ffffff', cursor: 'pointer' }}
+              >
+                <option value="recommended">Recommended Mode (Isolate Text & Keep Razor Sharp)</option>
+                <option value="maximum">Maximum Downsample Crunch (Compress Heavy Image Scan Layers)</option>
+                <option value="low">Low Optimization (Lossless Structural Deflate & Metadata Scrub)</option>
+              </select>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: '700', color: '#475569' }}>Enter target file size limit constraints:</label>
+                <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                  <input type="number" value={manualTargetSize} onChange={(e) => setManualTargetSize(e.target.value)} style={{ width: '100%', padding: '0.75rem 3rem 0.75rem 0.85rem', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '0.95rem', fontWeight: '700', outline: 'none', color: '#0f172a' }} placeholder="e.g. 500" />
+                  <span style={{ position: 'absolute', right: '1rem', fontWeight: '800', fontSize: '0.85rem', color: '#94a3b8', letterSpacing: '0.05em' }}>KB</span>
+                </div>
+              </div>
+
+              {/* QUICK CONFIG SHORTCUT CHIPS */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#94a3b8' }}>Presets:</span>
+                {[
+                  { label: '🏛️ Govt Portal (100KB)', val: '100' },
+                  { label: '💼 Resume Share (500KB)', val: '500' },
+                  { label: '📁 Normal Document (1000KB)', val: '1000' }
+                ].map((chip, idx) => (
+                  <button type="button" key={idx} onClick={() => setManualTargetSize(chip.val)} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '0.3rem 0.75rem', fontSize: '0.75rem', fontWeight: '700', color: '#475569', cursor: 'pointer', transition: 'all 0.15s' }}>
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* CLARITY FORECAST INDICATOR BOX */}
+              {selectedFile && (
+                <div style={{ background: '#f8fafc', padding: '0.85rem 1rem', borderRadius: '10px', border: '1px solid #e2e8f0', display: 'flex', gap: '0.5rem', flexDirection: 'column' }}>
+                  <div style={{ fontSize: '0.8rem', fontWeight: '700', color: '#64748b' }}>Expected Quality Forecast:</div>
+                  <div style={{ fontSize: '0.85rem', fontWeight: '800', color: clarityForecast.color }}>{clarityForecast.text}</div>
+                </div>
+              )}
+            </div>
+          )}
 
           <button type="button" onClick={triggerCompression} disabled={!selectedFile} style={{ width: '100%', background: selectedFile ? 'linear-gradient(135deg, #1E1B4B, #312E81)' : '#cbd5e1', color: 'white', border: 'none', padding: '0.9rem', borderRadius: '12px', fontWeight: '700', cursor: selectedFile ? 'pointer' : 'not-allowed', boxShadow: selectedFile ? '0 4px 12px rgba(30, 27, 75, 0.15)' : 'none', transition: 'all 0.2s', marginTop: 'auto' }}>
             Crunch Document Capacity
