@@ -73,17 +73,23 @@ export default function ImageCompressor() {
     }
   };
 
-  // --- RUN BACKGROUND WORKER COMPRESSION ---
+  // --- COMMUNICATE WITH BACKGROUND THREAD LOOP ---
   const triggerCompression = async () => {
     if (!selectedFile) return;
 
-    // 🟢 1. MEMORY PURGE: Revoke old object links inside browser memory cache layers
+    // 🟢 CRITICAL CACHE BREAK: If a background thread is already alive, kill it instantly
+    if (workerRef.current) {
+      workerRef.current.terminate();
+      workerRef.current = null;
+    }
+
+    // 1. MEMORY PURGE: Revoke old object links inside browser memory cache layers
     if (compressedDownloadUrl) {
       URL.revokeObjectURL(compressedDownloadUrl);
       setCompressedDownloadUrl('');
     }
 
-    // 🟢 2. STATE HARD PURGE: Wipe calculation object state before entering the processing pass
+    // 2. STATE HARD PURGE: Wipe calculation object state before entering the processing pass
     setOutputDetails({ sizeKb: 0, qualityUsed: 0, formatShifted: false });
     setLiveSizeEstimate('');
 
@@ -91,6 +97,7 @@ export default function ImageCompressor() {
     setProcessingPass(1);
     setErrorMessage('');
 
+    // Now spawn a 100% fresh, un-cached worker thread instance
     workerRef.current = new Worker('/image-worker.js');
     const fileArrayBuffer = await selectedFile.arrayBuffer();
 
@@ -114,7 +121,6 @@ export default function ImageCompressor() {
         const outputBlob = new Blob([finalBuffer], { type: forcedFormatShift ? 'image/jpeg' : selectedFile.type });
         const downloadLinkUrl = URL.createObjectURL(outputBlob);
 
-        // 🟢 3. STATE SYNC: Set output specifications safely into storage first
         setOutputDetails({
           sizeKb: parseFloat(finalSizeKb),
           qualityUsed: qualityPercentageUsed,
@@ -122,32 +128,20 @@ export default function ImageCompressor() {
         });
         setCompressedDownloadUrl(downloadLinkUrl);
         
-        // Delay view transition slightly to ensure React completes layout metrics compilation 
         setTimeout(() => {
           setActiveStep('success');
         }, 40);
 
         workerRef.current.terminate(); 
+        workerRef.current = null; // Clear the pointer reference
       } 
       else if (status === 'error') {
         setErrorMessage(message || 'An operational loop error occurred.');
         setActiveStep('setup');
         workerRef.current.terminate();
+        workerRef.current = null;
       }
     };
-  };
-
-  // --- FULL HARD RESET ROUTINE ---
-  const handleFullReset = () => {
-    if (compressedDownloadUrl) {
-      URL.revokeObjectURL(compressedDownloadUrl);
-    }
-    setSelectedFile(null);
-    setFileDetails({ name: '', sizeKb: 0, type: '' });
-    setCompressedDownloadUrl('');
-    setManualTargetSize('200');
-    setQualitySlider(75);
-    setActiveStep('setup');
   };
 
   return (
