@@ -3,24 +3,38 @@
 import { useState, useRef } from 'react';
 
 export default function PdfCompressor() {
+  // --- LAYER STATE STEP MANAGER ---
+  // Steps: 'setup' (Form Inputs), 'processing' (Loading view), 'success' (Download Page view)
+  const [activeStep, setActiveStep] = useState('setup');
+
+  // --- FILE STORAGE STATES ---
   const [selectedFile, setSelectedFile] = useState(null);
-  const [fileDetails, setFileDetails] = useState({ name: '', sizeMb: 0 });
-  const [compressionProfile, setCompressionProfile] = useState('text-priority'); // 'text-priority', 'balanced', 'extreme'
-  const [engineStatus, setEngineStatus] = useState('idle'); // 'idle', 'processing', 'success', 'error'
-  const [progress, setProgress] = useState(0);
-  const [compressedDownloadUrl, setCompressedDownloadUrl] = useState('');
-  const [savedOutputSize, setSavedOutputSize] = useState('');
+  const [fileDetails, setFileDetails] = useState({ name: '', sizeKb: 0 });
+
+  // --- UI CONTROLLER STATES ---
+  const [optimizationProfile, setOptimizationProfile] = useState('recommended'); 
+  // Profiles: 'recommended' (Balanced compression), 'maximum' (High compression, lower image DPI), 'low' (Lossless metadata stripping)
+
+  // --- PROCESSING ENGINE STATES ---
+  const [processingPass, setProcessingPass] = useState(0);
+  const [liveSizeEstimate, setLiveSizeEstimate] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
-  const fileInputRef = useRef(null);
+  // --- DOWNLOAD OUTPUT STATES ---
+  const [compressedDownloadUrl, setCompressedDownloadUrl] = useState('');
+  const [outputDetails, setOutputDetails] = useState({ sizeKb: 0, compressionRatio: 0 });
 
+  const fileInputRef = useRef(null);
+  const workerRef = useRef(null);
+
+  // --- HANDLE INCOMING FILE ---
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
 
-      // Safety guardrail checkpoint to protect mobile browser heap allocations
+      // Safety guardrail for massive PDF documents to protect client browser heap limits
       if (file.size > 50 * 1024 * 1024) {
-        setErrorMessage('To protect your laptop memory, PDFs are capped at 50MB.');
+        setErrorMessage('To protect browser stability, PDF documents are capped at 50MB.');
         return;
       }
 
@@ -28,165 +42,225 @@ export default function PdfCompressor() {
       setSelectedFile(file);
       setFileDetails({
         name: file.name,
-        sizeMb: file.size / (1024 * 1024)
+        sizeKb: file.size / 1024
       });
-      setEngineStatus('idle');
-      setCompressedDownloadUrl('');
-      setProgress(0);
+      setActiveStep('setup');
     }
   };
 
-  const triggerPdfCompression = async () => {
+  // --- RUN BACKGROUND WORKER COMPRESSION ---
+  const triggerCompression = async () => {
     if (!selectedFile) return;
 
-    setEngineStatus('processing');
-    setProgress(20);
+    // 🟢 CRITICAL CACHE BREAK 1: Kill existing active thread instances instantly
+    if (workerRef.current) {
+      workerRef.current.terminate();
+      workerRef.current = null;
+    }
+
+    // 🟢 CRITICAL CACHE BREAK 2: Explicitly revoke previous PDF Blob URLs to free up RAM
+    if (compressedDownloadUrl) {
+      URL.revokeObjectURL(compressedDownloadUrl);
+      setCompressedDownloadUrl('');
+    }
+
+    // 🟢 CRITICAL CACHE BREAK 3: Clean state metrics before switching to loading layout view
+    setOutputDetails({ sizeKb: 0, compressionRatio: 0 });
+    setLiveSizeEstimate('');
+
+    setActiveStep('processing');
+    setProcessingPass(1);
     setErrorMessage('');
 
-    try {
-      const arrayBuffer = await selectedFile.arrayBuffer();
+    // Spawn a 100% brand-new isolated Web Worker for PDF crunching tasks
+    workerRef.current = new Worker('/pdf-worker.js');
 
-      // Dynamically load the pdf.js local driver engine scripts across CDN boundaries if missing
-      if (!window['pdfjs-dist/build/pdf']) {
-        setProgress(40);
-        const script = document.createElement('script');
-        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js';
-        document.body.appendChild(script);
-        
-        await new Promise((resolve) => setTimeout(resolve, 1200));
-        window['pdfjs-dist/build/pdf'].GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+    // Read a fresh array buffer slice from memory bubble on every click trigger
+    const fileArrayBuffer = await selectedFile.arrayBuffer();
+
+    workerRef.current.postMessage({
+      fileBuffer: fileArrayBuffer,
+      fileName: selectedFile.name,
+      profile: optimizationProfile
+    });
+
+    workerRef.current.onmessage = function (e) {
+      const { status, pass, currentSizeEstimate, finalBuffer, finalSizeKb, message } = e.data;
+
+      if (status === 'processing') {
+        setProcessingPass(pass);
+        setLiveSizeEstimate(`${currentSizeEstimate} KB`);
+      } 
+      else if (status === 'success') {
+        const outputBlob = new Blob([finalBuffer], { type: 'application/pdf' });
+        const downloadLinkUrl = URL.createObjectURL(outputBlob);
+
+        const savedSize = parseFloat(finalSizeKb);
+        const originalSize = fileDetails.sizeKb;
+        const reductionPercent = Math.round(((originalSize - savedSize) / originalSize) * 100);
+
+        // Commit fresh metrics calculations to state parameters safely first
+        setOutputDetails({
+          sizeKb: savedSize,
+          compressionRatio: reductionPercent > 0 ? reductionPercent : 0
+        });
+        setCompressedDownloadUrl(downloadLinkUrl);
+
+        // Micro-task queue wrapper layout guard
+        setTimeout(() => {
+          setActiveStep('success');
+        }, 40);
+
+        workerRef.current.terminate();
+        workerRef.current = null;
+      } 
+      else if (status === 'error') {
+        setErrorMessage(message || 'An error occurred during PDF optimization processing.');
+        setActiveStep('setup');
+        if (workerRef.current) {
+          workerRef.current.terminate();
+          workerRef.current = null;
+        }
       }
+    };
+  };
 
-      setProgress(60);
-
-      // Quantization Profile Modifiers 
-      let renderScale = 1.5; // Text priority keeps matrix sharp
-      let compressionRatioScalar = 0.8;
-      
-      if (compressionProfile === 'balanced') {
-        renderScale = 1.0;
-        compressionRatioScalar = 0.6;
-      } else if (compressionProfile === 'extreme') {
-        renderScale = 0.7;
-        compressionRatioScalar = 0.4;
-      }
-
-      const pdfjsLib = window['pdfjs-dist/build/pdf'];
-      const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      
-      setProgress(80);
-
-      // Create a secure local file object stream bypass loop
-      const localStreamUrl = URL.createObjectURL(selectedFile);
-      setCompressedDownloadUrl(localStreamUrl);
-
-      // Math algorithm emulation step to display real-time space saving results inside logs
-      const outputScalarEstimate = fileDetails.sizeMb * compressionRatioScalar;
-      const spaceSavedPercent = (100 - (compressionRatioScalar * 100)).toFixed(0);
-      
-      setSavedOutputSize(`~${outputScalarEstimate.toFixed(1)} MB (Reduced around ${spaceSavedPercent}%)`);
-      setProgress(100);
-      setEngineStatus('success');
-
-    } catch (error) {
-      console.error(error);
-      setErrorMessage('Failed to compress document matrix paths. Make sure file parameters are unencrypted.');
-      setEngineStatus('error');
+  // --- FULL HARD RESET ROUTINE ---
+  const handleFullReset = () => {
+    if (compressedDownloadUrl) {
+      URL.revokeObjectURL(compressedDownloadUrl);
     }
+    setSelectedFile(null);
+    setFileDetails({ name: '', sizeKb: 0 });
+    setCompressedDownloadUrl('');
+    setOptimizationProfile('recommended');
+    setActiveStep('setup');
   };
 
   return (
     <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '24px', padding: '2.25rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', boxShadow: '0 4px 20px rgba(0,0,0,0.02)', textAlign: 'left' }}>
       
-      {/* HEADER PORTIONS */}
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
-          <span style={{ fontSize: '1.85rem' }}>📕</span>
-          <h3 style={{ margin: 0, fontSize: '1.3rem', fontWeight: '800', color: '#0f172a', letterSpacing: '-0.01em' }}>Tiered Secure PDF Compressor</h3>
-        </div>
-        <p style={{ margin: 0, fontSize: '0.9rem', color: '#64748b', lineHeight: '1.6' }}>
-          🔒 Local Sandbox Active. Strips metadata layers and optimizes scanning DPI limits 100% locally.
-        </p>
-      </div>
-
-      {errorMessage && (
-        <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', color: '#991b1b', padding: '0.75rem 1rem', borderRadius: '10px', fontSize: '0.85rem', fontWeight: '600' }}>
-          ⚠️ {errorMessage}
-        </div>
-      )}
-
-      {/* DOCUMENT PICKER SLOT */}
-      {!selectedFile ? (
-        <div>
-          <input type="file" id="compPdfFileField" accept=".pdf" style={{ display: 'none' }} onChange={handleFileChange} ref={fileInputRef} />
-          <label htmlFor="compPdfFileField" style={{ display: 'block', background: '#f8fafc', border: '2px dashed #cbd5e1', padding: '2rem 1rem', borderRadius: '14px', textAlign: 'center', cursor: 'pointer', fontWeight: '700', color: '#475569' }}>
-            Click to select document payload (.pdf)
-          </label>
-        </div>
-      ) : (
-        <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ minWidth: 0, flex: 1, paddingRight: '1rem' }}>
-            <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fileDetails.name}</div>
-            <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '600', marginTop: '0.15rem' }}>Original footprint: {fileDetails.sizeMb.toFixed(2)} MB</div>
-          </div>
-          <button onClick={() => { setSelectedFile(null); setEngineStatus('idle'); }} style={{ background: 'none', border: 'none', color: '#ef4444', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'underline' }}>Remove</button>
-        </div>
-      )}
-
-      {/* ENGINE PROFILE TIER SELECTOR */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-        <label style={{ fontSize: '0.85rem', fontWeight: '700', color: '#475569' }}>Optimization Processing Profile:</label>
-        <select 
-          value={compressionProfile} 
-          onChange={(e) => setCompressionProfile(e.target.value)} 
-          style={{ padding: '0.75rem', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '0.95rem', fontWeight: '600', color: '#0f172a', outline: 'none', width: '100%', background: '#ffffff', cursor: 'pointer' }}
-        >
-          <option value="text-priority">Recommended Mode (Isolate Text & Keep Razor Sharp)</option>
-          <option value="balanced">Balanced Configuration (Standard Shrink Index)</option>
-          <option value="extreme">Extreme Optimization Suite (Maximum Space Saved)</option>
-        </select>
-      </div>
-
-      {/* PROGRESS TRACKER METRIC LINES */}
-      {engineStatus === 'processing' && (
-        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '1rem', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: '700', color: '#166534' }}>
-            <span>🛠️ Analyzing file structure segments...</span>
-            <span>{progress}%</span>
-          </div>
-          <div style={{ background: '#e2e8f0', height: '4px', borderRadius: '10px', overflow: 'hidden' }}>
-            <div style={{ background: '#22c55e', width: `${progress}%`, height: '100%', transition: 'all 0.3s' }}></div>
-          </div>
-        </div>
-      )}
-
-      {/* SUBMIT TRIGGERS PORTS LOCKUP */}
-      <div style={{ marginTop: 'auto' }}>
-        {engineStatus !== 'success' ? (
-          <button 
-            onClick={triggerPdfCompression} 
-            disabled={!selectedFile || engineStatus === 'processing'} 
-            style={{ width: '100%', background: selectedFile && engineStatus !== 'processing' ? 'linear-gradient(135deg, #1e1b4b, #312e81)' : '#cbd5e1', color: 'white', border: 'none', padding: '0.9rem', borderRadius: '12px', fontWeight: '700', cursor: selectedFile && engineStatus !== 'processing' ? 'pointer' : 'not-allowed', boxShadow: selectedFile && engineStatus !== 'processing' ? '0 4px 12px rgba(30, 27, 75, 0.15)' : 'none', transition: 'all 0.2s' }}
-          >
-            {engineStatus === 'processing' ? 'Optimizing Array Buffers...' : 'Crunch Document Capacity'}
-          </button>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', padding: '1rem', borderRadius: '12px', fontSize: '0.85rem', color: '#065f46', lineHeight: '1.5', fontWeight: '600' }}>
-              🎉 Optimization Process Concluded. Expected target size footprint: <strong>{savedOutputSize}</strong>. Text vector integrity fully locked.
+      {/* --- STEP 1: SETUP WORKSPACE --- */}
+      {activeStep === 'setup' && (
+        <>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
+              <span style={{ fontSize: '1.85rem' }}>📕</span>
+              <h3 style={{ margin: 0, fontSize: '1.3rem', fontWeight: '800', color: '#0f172a', letterSpacing: '-0.01em' }}>Tiered Secure PDF Compressor</h3>
             </div>
-            
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <a href={compressedDownloadUrl} download={`moon_compressed_${fileDetails.name}`} style={{ display: 'block', background: 'linear-gradient(135deg, #10B981, #059669)', color: 'white', padding: '0.9rem', borderRadius: '12px', fontWeight: '700', textDecoration: 'none', textAlign: 'center', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.2)' }}>
-                Download
-              </a>
-              <button onClick={() => { setSelectedFile(null); setEngineStatus('idle'); setCompressedDownloadUrl(''); }} style={{ background: '#e2e8f0', color: '#475569', border: 'none', borderRadius: '12px', fontWeight: '700', cursor: 'pointer' }}>
-                Compress New
+            <p style={{ margin: 0, fontSize: '0.9rem', color: '#64748b', lineHeight: '1.6' }}>
+              🔒 Local Sandbox Active. Strips metadata layers and optimizes scanning DPI limits 100% locally.
+            </p>
+          </div>
+
+          {errorMessage && (
+            <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', color: '#991b1b', padding: '0.75rem 1rem', borderRadius: '10px', fontSize: '0.85rem', fontWeight: '600' }}>
+              ⚠️ {errorMessage}
+            </div>
+          )}
+
+          {!selectedFile ? (
+            <div>
+              <input type="file" id="compPdfFileField" accept="application/pdf" style={{ display: 'none' }} onChange={handleFileChange} ref={fileInputRef} />
+              <label htmlFor="compPdfFileField" style={{ display: 'block', background: '#f8fafc', border: '2px dashed #cbd5e1', padding: '2rem 1rem', borderRadius: '14px', textAlign: 'center', cursor: 'pointer', fontWeight: '700', color: '#475569', transition: 'all 0.2s' }}>
+                Click to select document payload (.pdf)
+              </label>
+            </div>
+          ) : (
+            <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '12px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ minWidth: 0, flex: 1, paddingRight: '1rem' }}>
+                <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fileDetails.name}</div>
+                <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '600', marginTop: '0.15rem' }}>Original size: {fileDetails.sizeKb.toFixed(1)} KB</div>
+              </div>
+              <button type="button" onClick={handleFullReset} style={{ background: 'none', border: 'none', color: '#ef4444', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'underline' }}>Remove</button>
+            </div>
+          )}
+
+          {/* DYNAMIC PROFILE SELECTOR PANEL */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            <label style={{ fontSize: '0.85rem', fontWeight: '700', color: '#475569' }}>Optimization Processing Profile:</label>
+            <select 
+              value={optimizationProfile} 
+              onChange={(e) => setOptimizationProfile(e.target.value)}
+              style={{ width: '100%', padding: '0.75rem 0.85rem', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '0.95rem', fontWeight: '700', outline: 'none', color: '#0f172a', background: '#ffffff', cursor: 'pointer' }}
+            >
+              <option value="recommended">Recommended Mode (Isolate Text & Keep Razor Sharp)</option>
+              <option value="maximum">Maximum Downsample Crunch (Compress Heavy Image Scan Layers)</option>
+              <option value="low">Low Optimization (Lossless Structural Deflate & Metadata Scrub)</option>
+            </select>
+          </div>
+
+          <button type="button" onClick={triggerCompression} disabled={!selectedFile} style={{ width: '100%', background: selectedFile ? 'linear-gradient(135deg, #1E1B4B, #312E81)' : '#cbd5e1', color: 'white', border: 'none', padding: '0.9rem', borderRadius: '12px', fontWeight: '700', cursor: selectedFile ? 'pointer' : 'not-allowed', boxShadow: selectedFile ? '0 4px 12px rgba(30, 27, 75, 0.15)' : 'none', transition: 'all 0.2s', marginTop: 'auto' }}>
+            Crunch Document Capacity
+          </button>
+        </>
+      )}
+
+      {/* --- STEP 2: PROCESSING / LOADING RUN --- */}
+      {activeStep === 'processing' && (
+        <div style={{ padding: '3rem 1rem', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '1.25rem', alignItems: 'center' }}>
+          <div style={{ width: '40px', height: '40px', border: '3px solid #f3f3f3', borderTop: '3px solid #1e1b4b', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+          <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+          <div>
+            <h4 style={{ margin: '0 0 0.25rem 0', fontWeight: '800', color: '#0f172a', fontSize: '1.1rem' }}>Re-indexing Document Cluster Quantities</h4>
+            <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b', fontWeight: '500' }}>Evaluating binary vector layers locally inside background memory streams...</p>
+          </div>
+          {liveSizeEstimate && (
+            <div style={{ background: '#f5f5f7', padding: '0.5rem 1rem', borderRadius: '20px', fontSize: '0.8rem', color: '#1e1b4b', fontWeight: '700', border: '1px solid #e2e8f0' }}>
+              Current object pass weight trace: {liveSizeEstimate} (Cycle pass {processingPass})
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* --- STEP 3: DEDICATED DOWNLOAD SUCCESS PAGE --- */}
+      {activeStep === 'success' && (
+        <>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem' }}>
+              <span style={{ fontSize: '1.85rem' }}>⚡</span>
+              <h3 style={{ margin: 0, fontSize: '1.3rem', fontWeight: '800', color: '#0f172a', letterSpacing: '-0.01em' }}>PDF Compression Complete!</h3>
+            </div>
+            <p style={{ margin: 0, fontSize: '0.9rem', color: '#64748b', fontWeight: '500' }}>Your optimized PDF asset is compiled and verified.</p>
+          </div>
+
+          <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '1.25rem', borderRadius: '16px', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            <div style={{ fontSize: '0.85rem', color: '#475569', fontWeight: '600', display: 'flex', justifyContent: 'space-between' }}>
+              <span>Document Title:</span>
+              <strong style={{ color: '#0f172a', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fileDetails.name}</strong>
+            </div>
+            <div style={{ fontSize: '0.85rem', color: '#475569', fontWeight: '600', display: 'flex', justifyContent: 'space-between' }}>
+              <span>Initial Blueprint Size:</span>
+              <span style={{ color: '#64748b' }}>{fileDetails.sizeKb.toFixed(1)} KB</span>
+            </div>
+            <div style={{ fontSize: '0.85rem', color: '#475569', fontWeight: '600', display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed #cbd5e1', paddingTop: '0.75rem' }}>
+              <span>Optimized Output Weight:</span>
+              <strong style={{ color: '#4f46e5', fontSize: '1rem' }}>{outputDetails.sizeKb.toFixed(1)} KB</strong>
+            </div>
+          </div>
+
+          {outputDetails.compressionRatio > 0 && (
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534', padding: '0.75rem 1rem', borderRadius: '10px', fontSize: '0.85rem', fontWeight: '700', textAlign: 'center' }}>
+              📈 Document weight reduced by {outputDetails.compressionRatio}% overall!
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem', marginTop: '1rem' }}>
+            <a href={compressedDownloadUrl} download={`moon_compressed_${fileDetails.name}`} style={{ display: 'block', background: 'linear-gradient(135deg, #1E1B4B, #312E81)', color: 'white', padding: '0.9rem', borderRadius: '12px', fontWeight: '700', textDecoration: 'none', textAlign: 'center', boxShadow: '0 4px 12px rgba(30, 27, 75, 0.2)', fontSize: '0.95rem' }}>
+              📥 Download Optimized PDF
+            </a>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.25rem 0.5rem', marginTop: '0.25rem' }}>
+              <button type="button" onClick={() => setActiveStep('setup')} style={{ background: 'none', border: 'none', color: '#4f46e5', fontWeight: '700', fontSize: '0.85rem', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
+                ⚙️ Alter Profile Settings
+              </button>
+              <button type="button" onClick={handleFullReset} style={{ background: 'none', border: 'none', color: '#64748b', fontWeight: '700', fontSize: '0.85rem', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
+                📁 Choose Different Document
               </button>
             </div>
           </div>
-        )}
-      </div>
+        </>
+      )}
 
     </div>
   );
