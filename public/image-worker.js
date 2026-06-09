@@ -8,10 +8,13 @@
 self.onmessage = async function (e) {
   const { fileBuffer, fileType, fileName, targetSizeKb, mode, qualitySliderValue } = e.data;
   
+  // Create a tracking pointer to safely dispose of hardware images from RAM
+  let bitmap = null;
+
   try {
     // 1. Reconstruct the raw binary data array inside the worker's thread memory bubble
     const blob = new Blob([fileBuffer], { type: fileType });
-    const bitmap = await self.createImageBitmap(blob);
+    bitmap = await self.createImageBitmap(blob);
     
     // Create an offscreen canvas context (natively supported inside browser Web Workers)
     const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
@@ -26,7 +29,7 @@ self.onmessage = async function (e) {
     ctx.drawImage(bitmap, 0, 0);
 
     let finalBlob = blob;
-    let finalSizeKb = fileBuffer.byteLength / 1024;
+    let finalSizeKb = blob.size / 1024; // 🟢 FIXED: Use true blob size metadata instead of byteLength tracking
     let appliedQuality = qualitySliderValue / 100;
 
     // ---------------------------------------------------------------------------
@@ -34,7 +37,6 @@ self.onmessage = async function (e) {
     // ---------------------------------------------------------------------------
     if (mode === 'slider') {
       if (fileType === 'image/png') {
-        // PNG uses lossless quantization. We can downsample color depth layers locally.
         finalBlob = await canvas.convertToBlob({ type: 'image/png' });
       } else {
         finalBlob = await canvas.convertToBlob({
@@ -49,35 +51,29 @@ self.onmessage = async function (e) {
     // 🎯 MODE B: 5-PASS TARGET-SEEKING BINARY SEARCH ALGORITHM (Manual Target Size)
     // ---------------------------------------------------------------------------
     else {
-      let lowQuality = 0.10;
+      let lowQuality = 0.05; // Drop lower limits slightly to allow hitting extreme compressions like 10KB
       let highQuality = 0.95;
       let currentPass = 1;
       const maxPasses = 5;
       
-      // If original file is already smaller than the user's manual target, keep original balance parameters
+      // Force calculation pass if original size is heavier than requested ceiling
       if (finalSizeKb <= targetSizeKb) {
         if (fileType !== 'image/png') {
           finalBlob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.90 });
           finalSizeKb = finalBlob.size / 1024;
+        } else {
+          // If it's a PNG and it's already under the limit, pass it through cleanly
+          finalBlob = blob;
         }
       } else {
-        // Run binary iterations to find perfect quantization settings without crashing laptop
+        // Run fresh binary iterations to find perfect quantization settings
         while (currentPass <= maxPasses) {
           appliedQuality = (lowQuality + highQuality) / 2;
           
-          let tempBlob;
-          if (fileType === 'image/png') {
-            // PNG fallback: Convert to high-grade JPEG to respect the hard size ceiling requested by user
-            tempBlob = await canvas.convertToBlob({
-              type: 'image/jpeg',
-              quality: appliedQuality
-            });
-          } else {
-            tempBlob = await canvas.convertToBlob({
-              type: 'image/jpeg',
-              quality: appliedQuality
-            });
-          }
+          const tempBlob = await canvas.convertToBlob({
+            type: 'image/jpeg',
+            quality: appliedQuality
+          });
           
           const tempSizeKb = tempBlob.size / 1024;
           
@@ -85,7 +81,7 @@ self.onmessage = async function (e) {
           if (tempSizeKb <= targetSizeKb) {
             finalBlob = tempBlob;
             finalSizeKb = tempSizeKb;
-            lowQuality = appliedQuality; // Step up quality scale parameters to see if we can get closer
+            lowQuality = appliedQuality; // Try to step up quality parameters to see if we can get closer
           } else {
             highQuality = appliedQuality; // Still too heavy, drop top bounds parameter down
           }
@@ -105,6 +101,11 @@ self.onmessage = async function (e) {
     // 3. Convert optimized data asset cleanly to ArrayBuffer to pass data back safely
     const finalBuffer = await finalBlob.arrayBuffer();
     
+    // 🟢 CLEANUP: Explicitly destroy image assets to clean up GPU/RAM hardware allocations
+    if (bitmap) {
+      bitmap.close();
+    }
+
     // Transfer buffer ownership natively to maximize thread performance speed
     self.postMessage({
       status: 'success',
@@ -115,6 +116,10 @@ self.onmessage = async function (e) {
     }, [finalBuffer]);
 
   } catch (error) {
+    // 🟢 CLEANUP ON CRASH: Prevent hardware leaks if a processing pass encounters a corrupt file system block
+    if (bitmap) {
+      bitmap.close();
+    }
     self.postMessage({ status: 'error', message: error.toString() });
   }
 };
