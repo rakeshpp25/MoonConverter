@@ -495,7 +495,7 @@ export default function HomePage() {
         </div>
       </section>
 
-     {/* --- 🔥 ADVANCED LOCAL ENGINE COMPRESSION HOOK SUITES --- */}
+    {/* --- 🔥 ADVANCED LOCAL ENGINE COMPRESSION HOOK SUITES --- */}
       <section id="compression-suites" style={{ padding: '4rem 0', background: '#f8fafc', borderTop: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0' }}>
         <div className="container" style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 1.5rem' }}>
           
@@ -512,8 +512,8 @@ export default function HomePage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
             
             {/* CARD 1: IMAGE COMPRESSOR NAVIGATION */}
-            <Link href="/compress-image" style={{ textDecoration: 'none' }}>
-              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '2rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.01)', transition: 'transform 0.2s, box-shadow 0.2s', textAlign: 'left' }}
+            <Link href="/compress-image" style={{ textDecoration: 'none', display: 'flex' }}>
+              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '2rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.01)', transition: 'transform 0.2s, box-shadow 0.2s', textAlign: 'left', width: '100%', height: '100%', boxSizing: 'border-box' }}
                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 10px 20px rgba(0,0,0,0.04)'; }}
                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.01)'; }}>
                 
@@ -524,8 +524,8 @@ export default function HomePage() {
             </Link>
 
             {/* CARD 2: PDF COMPRESSOR NAVIGATION */}
-            <Link href="/compress-pdf" style={{ textDecoration: 'none' }}>
-              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '2rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.01)', transition: 'transform 0.2s, box-shadow 0.2s', textAlign: 'left' }}
+            <Link href="/compress-pdf" style={{ textDecoration: 'none', display: 'flex' }}>
+              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '2rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.01)', transition: 'transform 0.2s, box-shadow 0.2s', textAlign: 'left', width: '100%', height: '100%', boxSizing: 'border-box' }}
                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 10px 20px rgba(0,0,0,0.04)'; }}
                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.01)'; }}>
                 <h3 style={{ margin: '0 0 0.5rem 0', color: '#0f172a', fontSize: '1.2rem', fontWeight: '800' }}>Secure PDF Compressor</h3>
