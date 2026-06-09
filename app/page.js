@@ -495,11 +495,10 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* --- 🔥 ADVANCED LOCAL ENGINE COMPRESSION HOOK SUITES --- */}
+     {/* --- 🔥 ADVANCED LOCAL ENGINE COMPRESSION HOOK SUITES --- */}
       <section id="compression-suites" style={{ padding: '4rem 0', background: '#f8fafc', borderTop: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0' }}>
         <div className="container" style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 1.5rem' }}>
           
-          {/* SEO Text Layout Block */}
           <div style={{ textAlign: 'left', marginBottom: '2.5rem' }}>
             <h2 style={{ color: '#0f172a', fontSize: '1.65rem', fontWeight: '800', letterSpacing: '-0.02em', margin: '0' }}>
               Advanced Local Compression Utilities
@@ -509,27 +508,33 @@ export default function HomePage() {
             </p>
           </div>
 
-          {/* Responsive Two-Column Grid Shell */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '2.5rem' }}>
+          {/* Simple Link Cards Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
             
-            {/* RENDER THE MODULAR CARDS NATIVELY */}
-            <ImageCompressor />
-            <PdfCompressor />
+            {/* CARD 1: IMAGE COMPRESSOR NAVIGATION */}
+            <Link href="/compress-image" style={{ textDecoration: 'none' }}>
+              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '2rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.01)', transition: 'transform 0.2s, box-shadow 0.2s', textAlign: 'left' }}
+                   onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 10px 20px rgba(0,0,0,0.04)'; }}
+                   onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.01)'; }}>
+                <span style={{ fontSize: '2.5rem', display: 'block', marginBottom: '1rem' }}>🖼️</span>
+                <h3 style={{ margin: '0 0 0.5rem 0', color: '#0f172a', fontSize: '1.2rem', fontWeight: '800' }}>Advanced Image Compressor</h3>
+                <p style={{ margin: 0, color: '#64748b', fontSize: '0.88rem', lineHeight: '1.5' }}>Compress JPG, PNG, and WebP assets to an exact targeted size (KB) instantly.</p>
+                <span style={{ display: 'inline-block', marginTop: '1.25rem', color: '#4f46e5', fontWeight: '700', fontSize: '0.85rem' }}>Open Tool →</span>
+              </div>
+            </Link>
 
-          </div>
-        </div>
-      </section>
+            {/* CARD 2: PDF COMPRESSOR NAVIGATION */}
+            <Link href="/compress-pdf" style={{ textDecoration: 'none' }}>
+              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '2rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.01)', transition: 'transform 0.2s, box-shadow 0.2s', textAlign: 'left' }}
+                   onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 10px 20px rgba(0,0,0,0.04)'; }}
+                   onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.01)'; }}>
+                <span style={{ fontSize: '2.5rem', display: 'block', marginBottom: '1rem' }}>📕</span>
+                <h3 style={{ margin: '0 0 0.5rem 0', color: '#0f172a', fontSize: '1.2rem', fontWeight: '800' }}>Secure PDF Compressor</h3>
+                <p style={{ margin: 0, color: '#64748b', fontSize: '0.88rem', lineHeight: '1.5' }}>Optimize multi-page documents using tiered quality profiles while keeping text sharp.</p>
+                <span style={{ display: 'inline-block', marginTop: '1.25rem', color: '#1e1b4b', fontWeight: '700', fontSize: '0.85rem' }}>Open Tool →</span>
+              </div>
+            </Link>
 
-      {/* SUPPORTED CHANNELS SLIDESHOW FOOTER GRID */}
-      <section className="section" style={{ background: '#F1F5F9' }}>
-        <div className="container">
-          <h2 className="section-title">Supported Formats</h2>
-          <p className="section-subtitle">Upload, convert, and process your files effortlessly. We support the most popular image and document formats while keeping your data private and secure.</p>
-          <div className="format-flex">
-            {['JPG', 'JPEG', 'PNG', 'WebP', 'GIF', 'BMP', 'TIFF', 'SVG', 'AVIF', 'ICO', 'HEIC', 'HEIF', 'JFIF', 'TGA'].map((fmt) => (
-              <div key={fmt} className="format-badge">{fmt}</div>
-            ))}
-            <div className="format-badge" style={{ background: '#4f46e5', color: 'white' }}>PDF</div>
           </div>
         </div>
       </section>
