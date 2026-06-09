@@ -27,7 +27,6 @@ export default function ImageCompressor() {
   const workerRef = useRef(null);
 
   // --- 🔥 LOGIC: REAL-TIME CLARITY FORECAST Engine ---
-  // Solves the blind guessing game pain point by calculating quality loss expectations instantly
   useEffect(() => {
     if (!selectedFile || compressionMode !== 'target') return;
 
@@ -50,12 +49,11 @@ export default function ImageCompressor() {
     }
   }, [manualTargetSize, selectedFile, compressionMode, fileDetails.sizeKb]);
 
-  // --- INITIALIZE WEB WORKER THREAD ---
+  // --- INITIALIZE FILE CHANGE AND SECURITY GUARDRAILS ---
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
       
-      // Safety guardrail to protect laptop memory footprint bounds
       if (file.size > 30 * 1024 * 1024) {
         setErrorMessage('To protect your laptop memory, images are capped at 30MB.');
         return;
@@ -81,12 +79,13 @@ export default function ImageCompressor() {
     setProcessingPass(1);
     setErrorMessage('');
 
-    // Setup an isolated web worker background script pointer
+    // Setup an isolated web worker background script instance
     workerRef.current = new Worker('/image-worker.js');
 
+    // Generate a fresh workspace slice of the array buffer on every submission click
     const fileArrayBuffer = await selectedFile.arrayBuffer();
 
-    // Transport payloads directly across the worker thread wall lines
+    // 🟢 FIXED: Removed trailing transferable object lock to keep source state reusable
     workerRef.current.postMessage({
       fileBuffer: fileArrayBuffer,
       fileType: selectedFile.type,
@@ -94,9 +93,9 @@ export default function ImageCompressor() {
       mode: compressionMode,
       qualitySliderValue: qualitySlider,
       targetSizeKb: parseFloat(manualTargetSize) || 200
-    }, [fileArrayBuffer]); // Ownership transfer prevents duplicate memory copies
+    }); 
 
-    // Handle incoming evaluation returns from public/image-worker.js
+    // Handle updates back from worker thread matrix
     workerRef.current.onmessage = function (e) {
       const { status, pass, currentSizeEstimate, finalBuffer, finalSizeKb, qualityPercentageUsed, forcedFormatShift, message } = e.data;
 
@@ -115,7 +114,7 @@ export default function ImageCompressor() {
           formatShifted: forcedFormatShift
         });
         setEngineStatus('success');
-        workerRef.current.terminate(); // Safely kill background worker thread to free computer memory
+        workerRef.current.terminate(); // Kill execution cycle to release system memory
       } 
       else if (status === 'error') {
         setErrorMessage(message || 'An operational loop error occurred.');
@@ -173,7 +172,7 @@ export default function ImageCompressor() {
         </button>
       </div>
 
-      {/* --- RENDER CONFIGURATION PORTS DEPENDING ON SELECTION MODE --- */}
+      {/* --- RENDER MODES --- */}
       {compressionMode === 'slider' ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: '700', color: '#475569' }}>
@@ -192,7 +191,7 @@ export default function ImageCompressor() {
             </div>
           </div>
 
-          {/* ONE-CLICK SHORTCUT QUICK CHIPS SPLIT PORTS ARRAY */}
+          {/* CHIPS */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
             <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#94a3b8' }}>Presets:</span>
             {[
@@ -206,7 +205,7 @@ export default function ImageCompressor() {
             ))}
           </div>
 
-          {/* REAL TIME FEEDBACK CLARITY STATUS BOX */}
+          {/* FORECAST */}
           {selectedFile && (
             <div style={{ background: '#f8fafc', padding: '0.85rem 1rem', borderRadius: '10px', border: '1px solid #e2e8f0', display: 'flex', gap: '0.5rem', flexDirection: 'column' }}>
               <div style={{ fontSize: '0.8rem', fontWeight: '700', color: '#64748b' }}>Expected Quality Forecast:</div>
@@ -216,7 +215,7 @@ export default function ImageCompressor() {
         </div>
       )}
 
-      {/* LIVE ENGINE PROCESS EXECUTION MONITOR STRIPS */}
+      {/* METRIC STRIPS */}
       {engineStatus === 'processing' && (
         <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', padding: '1rem', borderRadius: '12px', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: '700', color: '#1e40af' }}>
@@ -231,7 +230,7 @@ export default function ImageCompressor() {
         </div>
       )}
 
-      {/* --- RUN ACTION MATRIX CLICK LOGIC TRIGGERS --- */}
+      {/* ACTIONS ROW */}
       <div style={{ marginTop: 'auto' }}>
         {engineStatus !== 'success' ? (
           <button onClick={triggerCompression} disabled={!selectedFile || engineStatus === 'processing'} style={{ width: '100%', background: selectedFile && engineStatus !== 'processing' ? 'linear-gradient(135deg, #4F46E5, #4338CA)' : '#cbd5e1', color: 'white', border: 'none', padding: '0.9rem', borderRadius: '12px', fontWeight: '700', cursor: selectedFile && engineStatus !== 'processing' ? 'pointer' : 'not-allowed', boxShadow: selectedFile && engineStatus !== 'processing' ? '0 4px 12px rgba(79, 70, 229, 0.2)' : 'none', transition: 'all 0.2s' }}>
