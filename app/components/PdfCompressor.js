@@ -76,22 +76,18 @@ export default function PdfCompressor() {
   const triggerCompression = async () => {
     if (!selectedFile) return;
 
-    // 🟢 STATE LOCK: Secure explicit integer copy before React loops can alter text configurations
     const lockedTargetSize = Math.floor(parseFloat(manualTargetSize)) || 500;
 
-    // CRITICAL CACHE BREAK 1: Kill existing active thread instances instantly
     if (workerRef.current) {
       workerRef.current.terminate();
       workerRef.current = null;
     }
 
-    // CRITICAL CACHE BREAK 2: Explicitly revoke previous PDF Blob URLs to free up RAM
     if (compressedDownloadUrl) {
       URL.revokeObjectURL(compressedDownloadUrl);
       setCompressedDownloadUrl('');
     }
 
-    // CRITICAL CACHE BREAK 3: Clean state metrics before switching to loading layout view
     setOutputDetails({ sizeKb: 0, compressionRatio: 0 });
     setLiveSizeEstimate('');
 
@@ -99,10 +95,20 @@ export default function PdfCompressor() {
     setProcessingPass(1);
     setErrorMessage('');
 
-    // Spawn a 100% brand-new isolated Web Worker for PDF crunching tasks
+    // Spawn the fresh high-speed worker instance
     workerRef.current = new Worker('/pdf-worker.js');
+    
+    // 🟢 SAFETIES: Add an absolute time threshold trap. If a browser takes too long,
+    // it falls back to setup safely so the interface never crashes or locks up.
+    const processingTimeoutTracker = setTimeout(() => {
+      if (workerRef.current && activeStep === 'processing') {
+        workerRef.current.terminate();
+        workerRef.current = null;
+        setErrorMessage('This complex document is highly compressed or protected. Try using a preset profile mode instead.');
+        setActiveStep('setup');
+      }
+    }, 45000); // 45-second hardware cutoff safety net
 
-    // Read a fresh array buffer slice from memory bubble on every click trigger
     const fileArrayBuffer = await selectedFile.arrayBuffer();
 
     workerRef.current.postMessage({
@@ -118,9 +124,11 @@ export default function PdfCompressor() {
 
       if (status === 'processing') {
         setProcessingPass(pass);
-        setLiveSizeEstimate(`${currentSizeEstimate} KB`);
+        setLiveSizeEstimate(currentSizeEstimate);
       } 
       else if (status === 'success') {
+        clearTimeout(processingTimeoutTracker); // Clear timeout safety instantly on success
+        
         const outputBlob = new Blob([finalBuffer], { type: 'application/pdf' });
         const downloadLinkUrl = URL.createObjectURL(outputBlob);
 
@@ -128,14 +136,12 @@ export default function PdfCompressor() {
         const originalSize = fileDetails.sizeKb;
         const reductionPercent = Math.round(((originalSize - savedSize) / originalSize) * 100);
 
-        // Commit fresh metrics calculations to state parameters safely first
         setOutputDetails({
           sizeKb: savedSize,
           compressionRatio: reductionPercent > 0 ? reductionPercent : 0
         });
         setCompressedDownloadUrl(downloadLinkUrl);
 
-        // Micro-task queue wrapper layout guard to isolate view change threads
         setTimeout(() => {
           setActiveStep('success');
         }, 40);
@@ -144,6 +150,7 @@ export default function PdfCompressor() {
         workerRef.current = null;
       } 
       else if (status === 'error') {
+        clearTimeout(processingTimeoutTracker);
         setErrorMessage(message || 'An error occurred during PDF optimization processing.');
         setActiveStep('setup');
         if (workerRef.current) {
@@ -153,7 +160,6 @@ export default function PdfCompressor() {
       }
     };
   };
-
   // --- FULL HARD RESET ROUTINE ---
   const handleFullReset = () => {
     if (compressedDownloadUrl) {
