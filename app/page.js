@@ -2,6 +2,10 @@
 import Link from 'next/link'; //
 import { useState, useRef } from 'react';
 
+// --- IMPORT YOUR COMPONENT SUITES NATIVELY ---
+import ImageCompressor from './components/ImageCompressor';
+import PdfCompressor from './components/PdfCompressor';
+
 export default function HomePage() {
   const fileInputRef = useRef(null);
   const canvasRef = useRef(null);
@@ -487,6 +491,31 @@ export default function HomePage() {
                 {tool.title}
               </a>
             ))}
+          </div>
+        </div>
+      </section>
+
+      {/* --- 🔥 ADVANCED LOCAL ENGINE COMPRESSION HOOK SUITES --- */}
+      <section id="compression-suites" style={{ padding: '4rem 0', background: '#f8fafc', borderTop: '1px solid #e2e8f0', borderBottom: '1px solid #e2e8f0' }}>
+        <div className="container" style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 1.5rem' }}>
+          
+          {/* SEO Text Layout Block */}
+          <div style={{ textAlign: 'left', marginBottom: '2.5rem' }}>
+            <h2 style={{ color: '#0f172a', fontSize: '1.65rem', fontWeight: '800', letterSpacing: '-0.02em', margin: '0' }}>
+              Advanced Local Compression Utilities
+            </h2>
+            <p style={{ color: '#64748b', fontSize: '0.95rem', margin: '0.35rem 0 0 0', fontWeight: '500' }}>
+              🔒 100% Secure Client-Side Operations — Your file payloads never leave your browser memory.
+            </p>
+          </div>
+
+          {/* Responsive Two-Column Grid Shell */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '2.5rem' }}>
+            
+            {/* RENDER THE MODULAR CARDS NATIVELY */}
+            <ImageCompressor />
+            <PdfCompressor />
+
           </div>
         </div>
       </section>
