@@ -1,102 +1,120 @@
 // public/pdf-worker.js
 
-// Import pdf-lib directly inside the background thread script using unpkg CDN
+// 🟢 Import pdf-lib core components safely from standard unpkg CDN
 importScripts('https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js');
 
 /**
  * 🔒 MoonConverter Secure Offline PDF Web Worker Engine
- * Unpacks PDF data structures and compresses embedded image layers to match size constraints.
+ * Recursively deep-scans the internal document object stream tree dictionary.
+ * Re-quantizes and unzips internal embedded scan images using canvas pipelines.
  */
 self.onmessage = async function (e) {
-  const { fileBuffer, fileName, mode, profile, targetSizeKb } = e.data;
+  const { fileBuffer, mode, profile, targetSizeKb } = e.data;
 
   try {
-    // 1. Parse the document array structures natively
-    const pdfDoc = await PDFLib.PDFDocument.load(fileBuffer);
-    const pages = pdfDoc.getPages();
-    
-    self.postMessage({ status: 'processing', pass: 1, currentSizeEstimate: 'Deconstructing page matrix streams...' });
+    self.postMessage({ status: 'processing', pass: 1, currentSizeEstimate: 'Initializing local document sandbox...' });
 
-    // Determine target quality scaling parameters based on the mode selection
-    let imageQuality = 0.70; // Default recommended level
+    // 1. Reconstruct document structural models safely
+    const pdfDoc = await PDFLib.PDFDocument.load(fileBuffer);
     
+    // Calculate adaptive JPEG image quality scales based on input configurations
+    let targetQuality = 0.55; // Default balanced baseline quality
+
     if (mode === 'target') {
-      const currentSizeKb = fileBuffer.byteLength / 1024;
-      const constraintRatio = targetSizeKb / currentSizeKb;
-      
-      // Calculate a strict safe compression quality bracket based on the target size drop requested
-      if (constraintRatio < 0.3) imageQuality = 0.25;      // Heavy compress (e.g. 200KB down to 50KB)
-      else if (constraintRatio < 0.6) imageQuality = 0.45; // Medium compress (e.g. 200KB down to 100KB)
-      else imageQuality = 0.65;                            // Light optimization pass
+      const inputSizeKb = fileBuffer.byteLength / 1024;
+      const targetRatio = targetSizeKb / inputSizeKb;
+
+      if (targetRatio < 0.25) {
+        targetQuality = 0.15; // Aggressive squeeze down
+      } else if (targetRatio < 0.5) {
+        targetQuality = 0.35; // Medium reduction bracket
+      } else if (targetRatio < 0.75) {
+        targetQuality = 0.55; // Recommended balance standard
+      } else {
+        targetQuality = 0.75; // Subtle compression trace pass
+      }
     } else {
-      if (profile === 'maximum') imageQuality = 0.35;
-      if (profile === 'low') imageQuality = 0.85;
+      if (profile === 'maximum') targetQuality = 0.25;
+      if (profile === 'low') targetQuality = 0.85;
     }
 
-    self.postMessage({ status: 'processing', pass: 2, currentSizeEstimate: 'Extracting and shrinking embedded scan elements...' });
+    self.postMessage({ status: 'processing', pass: 2, currentSizeEstimate: 'Unpacking embedded image objects...' });
 
-    // 2. 🔥 DEEP OBJECT TRAVERSAL LAYER: Find and compress embedded images hidden in document pages
-    // This is what forces the size to break through the 198 KB wall!
-    const baseContext = pdfDoc.context;
-    const indirectObjects = baseContext.indirectObjects;
+    // 2. 🔥 DEEP SCAN LOOP: Traverse indirect object streams to grab raster objects
+    const context = pdfDoc.context;
+    const indirectObjects = context.indirectObjects;
+    let imagesProcessedCount = 0;
 
     for (const [ref, obj] of indirectObjects.entries()) {
-      // Check if the indirect object structure is an image block stream (XObject Image)
+      // Check if current block structure maps to an unzipped binary data object stream
       if (obj instanceof PDFLib.PDFStream && obj.dict) {
         const subtype = obj.dict.get(PDFLib.PDFName.of('Subtype'));
         
         if (subtype === PDFLib.PDFName.of('Image')) {
           try {
-            // Unpack image stream bytes safely
-            const imageBytes = obj.contents;
-            const imgBlob = new Blob([imageBytes]);
+            imagesProcessedCount++;
+            self.postMessage({ 
+              status: 'processing', 
+              pass: 2, 
+              currentSizeEstimate: `Downsampling embedded image layer #${imagesProcessedCount}...` 
+            });
+
+            // Extract the original raster image byte array
+            const originalBytes = obj.contents;
+            const imageBlob = new Blob([originalBytes]);
             
-            // Re-render frame using worker's offscreen bitmap system
-            const bitmap = await self.createImageBitmap(imgBlob);
-            const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-            const ctx = canvas.getContext('2d');
+            // Draw into an offscreen hardware bitmap container context
+            const imgBitmap = await self.createImageBitmap(imageBlob);
+            const offscreenCanvas = new OffscreenCanvas(imgBitmap.width, imgBitmap.height);
+            const canvasCtx = offscreenCanvas.getContext('2d');
             
-            ctx.drawImage(bitmap, 0, 0);
+            // Build transparent background fallback protection parameters
+            canvasCtx.fillStyle = '#ffffff';
+            canvasCtx.fillRect(0, 0, offscreenCanvas.width, offscreenCanvas.height);
+            canvasCtx.drawImage(imgBitmap, 0, 0);
             
-            // Compress the inner image layers to a lower quality JPEG matrix format
-            const compressedImgBlob = await canvas.convertToBlob({
+            // Compress image layers down directly into a tight JPEG matrix array configuration
+            const optimizedBlob = await offscreenCanvas.convertToBlob({
               type: 'image/jpeg',
-              quality: imageQuality
+              quality: targetQuality
             });
             
-            // Overwrite old heavy content stream with our newly shrunken frame parameters
-            const compressedBytes = new Uint8Array(await compressedImgBlob.arrayBuffer());
-            obj.contents = compressedBytes;
-            obj.dict.set(PDFLib.PDFName.of('Length'), PDFLib.PDFNumber.of(compressedBytes.length));
+            // Read fresh calculated raw array bits buffer snapshots
+            const optimizedBytes = new Uint8Array(await optimizedBlob.arrayBuffer());
             
-            bitmap.close();
-          } catch (imgErr) {
-            // Fallback fail-safe: Skip corrupted vector masks or structural color layer blocks safely
+            // 🟢 FORCE DIRECT STRUCTURAL OVERWRITE: Re-bind new data lengths straight to PDF dictionary trees
+            obj.contents = optimizedBytes;
+            obj.dict.set(PDFLib.PDFName.of('Length'), PDFLib.PDFNumber.of(optimizedBytes.length));
+            obj.dict.set(PDFLib.PDFName.of('Filter'), PDFLib.PDFName.of('DCTDecode')); // Updates dictionary encryption headers to JPEG configuration specifications
+            
+            imgBitmap.close();
+          } catch (innerImageError) {
+            // Safe fail-safe trace: Skip vector files, gradients, and font glyph paths
             continue;
           }
         }
       }
     }
 
-    self.postMessage({ status: 'processing', pass: 3, currentSizeEstimate: 'Purging document metadata records...' });
+    self.postMessage({ status: 'processing', pass: 3, currentSizeEstimate: 'Stripping layout metadata tracking histories...' });
 
-    // 3. Lossless data optimization passes
+    // 3. Lossless meta history deletion optimization sweeps
     pdfDoc.setTitle('');
     pdfDoc.setAuthor('');
     pdfDoc.setSubject('');
     pdfDoc.setCreator('');
     pdfDoc.setProducer('');
 
-    // 4. Save file payload utilizing compact object stream configurations
-    const optimizedBytes = await pdfDoc.save({
+    // 4. Save and deflate document map arrays utilizing tightly indexed object streams
+    const finalDocumentBytes = await pdfDoc.save({
       useObjectStreams: true, 
       addIndependentObjects: false
     });
 
-    const finalBuffer = optimizedBytes.buffer;
+    const finalBuffer = finalDocumentBytes.buffer;
     const finalSizeKb = finalBuffer.byteLength / 1024;
 
-    // Send successful data payload across the thread wall channels
+    // Send the truly updated compressed data asset across the channel
     self.postMessage({
       status: 'success',
       finalBuffer: finalBuffer,
