@@ -685,7 +685,7 @@ export default function HomePage() {
         "WebP conversion",
         "SVG conversion",
         "PDF to Image",
-        "Image to PDF"
+        "Image to PDF",
         "JPG to AVIF",
         "AVIF to JPG",
         "HEIC to JPG",
