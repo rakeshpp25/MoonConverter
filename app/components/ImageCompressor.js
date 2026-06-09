@@ -73,23 +73,23 @@ export default function ImageCompressor() {
     }
   };
 
-  // --- COMMUNICATE WITH BACKGROUND THREAD LOOP ---
+  // --- RUN BACKGROUND WORKER COMPRESSION ---
   const triggerCompression = async () => {
     if (!selectedFile) return;
 
-    // 🟢 CRITICAL CACHE BREAK: If a background thread is already alive, kill it instantly
+    // 🟢 CRITICAL CACHE BREAK 1: If an old thread is still running, kill it instantly
     if (workerRef.current) {
       workerRef.current.terminate();
       workerRef.current = null;
     }
 
-    // 1. MEMORY PURGE: Revoke old object links inside browser memory cache layers
+    // 🟢 CRITICAL CACHE BREAK 2: Explicitly revoke previous Blob URLs to free browser heap RAM
     if (compressedDownloadUrl) {
       URL.revokeObjectURL(compressedDownloadUrl);
       setCompressedDownloadUrl('');
     }
 
-    // 2. STATE HARD PURGE: Wipe calculation object state before entering the processing pass
+    // 🟢 CRITICAL CACHE BREAK 3: Wipe state parameters cleanly before switching to processing layout view
     setOutputDetails({ sizeKb: 0, qualityUsed: 0, formatShifted: false });
     setLiveSizeEstimate('');
 
@@ -97,8 +97,10 @@ export default function ImageCompressor() {
     setProcessingPass(1);
     setErrorMessage('');
 
-    // Now spawn a 100% fresh, un-cached worker thread instance
+    // Spawn a 100% brand-new isolated Web Worker background execution thread
     workerRef.current = new Worker('/image-worker.js');
+    
+    // Read a fresh array buffer snapshot layer on every click trigger
     const fileArrayBuffer = await selectedFile.arrayBuffer();
 
     workerRef.current.postMessage({
@@ -121,6 +123,7 @@ export default function ImageCompressor() {
         const outputBlob = new Blob([finalBuffer], { type: forcedFormatShift ? 'image/jpeg' : selectedFile.type });
         const downloadLinkUrl = URL.createObjectURL(outputBlob);
 
+        // Commit fresh metrics calculations to state parameters first
         setOutputDetails({
           sizeKb: parseFloat(finalSizeKb),
           qualityUsed: qualityPercentageUsed,
@@ -128,20 +131,37 @@ export default function ImageCompressor() {
         });
         setCompressedDownloadUrl(downloadLinkUrl);
         
+        // Push the rendering transition to the back of the event loop macro-stack
         setTimeout(() => {
           setActiveStep('success');
         }, 40);
 
+        // Terminate worker reference immediately to clear device processing resources
         workerRef.current.terminate(); 
-        workerRef.current = null; // Clear the pointer reference
+        workerRef.current = null;
       } 
       else if (status === 'error') {
         setErrorMessage(message || 'An operational loop error occurred.');
         setActiveStep('setup');
-        workerRef.current.terminate();
-        workerRef.current = null;
+        if (workerRef.current) {
+          workerRef.current.terminate();
+          workerRef.current = null;
+        }
       }
     };
+  };
+
+  // --- FULL HARD RESET ROUTINE ---
+  const handleFullReset = () => {
+    if (compressedDownloadUrl) {
+      URL.revokeObjectURL(compressedDownloadUrl);
+    }
+    setSelectedFile(null);
+    setFileDetails({ name: '', sizeKb: 0, type: '' });
+    setCompressedDownloadUrl('');
+    setManualTargetSize('200');
+    setQualitySlider(75);
+    setActiveStep('setup');
   };
 
   return (
@@ -179,15 +199,15 @@ export default function ImageCompressor() {
                 <div style={{ fontSize: '0.9rem', fontWeight: '700', color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fileDetails.name}</div>
                 <div style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: '600', marginTop: '0.15rem' }}>Original size: {fileDetails.sizeKb.toFixed(1)} KB</div>
               </div>
-              <button onClick={handleFullReset} style={{ background: 'none', border: 'none', color: '#ef4444', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'underline' }}>Remove</button>
+              <button type="button" onClick={handleFullReset} style={{ background: 'none', border: 'none', color: '#ef4444', fontWeight: '700', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'underline' }}>Remove</button>
             </div>
           )}
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', background: '#f1f5f9', padding: '0.35rem', borderRadius: '12px' }}>
-            <button onClick={() => setCompressionMode('target')} style={{ border: 'none', padding: '0.6rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer', background: compressionMode === 'target' ? '#ffffff' : 'transparent', color: compressionMode === 'target' ? '#4f46e5' : '#64748b', boxShadow: compressionMode === 'target' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none', transition: 'all 0.15s' }}>
+            <button type="button" onClick={() => setCompressionMode('target')} style={{ border: 'none', padding: '0.6rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer', background: compressionMode === 'target' ? '#ffffff' : 'transparent', color: compressionMode === 'target' ? '#4f46e5' : '#64748b', boxShadow: compressionMode === 'target' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none', transition: 'all 0.15s' }}>
               🎯 Target Exact Size
             </button>
-            <button onClick={() => setCompressionMode('slider')} style={{ border: 'none', padding: '0.6rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer', background: compressionMode === 'slider' ? '#ffffff' : 'transparent', color: compressionMode === 'slider' ? '#4f46e5' : '#64748b', boxShadow: compressionMode === 'slider' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none', transition: 'all 0.15s' }}>
+            <button type="button" onClick={() => setCompressionMode('slider')} style={{ border: 'none', padding: '0.6rem', borderRadius: '8px', fontSize: '0.85rem', fontWeight: '700', cursor: 'pointer', background: compressionMode === 'slider' ? '#ffffff' : 'transparent', color: compressionMode === 'slider' ? '#4f46e5' : '#64748b', boxShadow: compressionMode === 'slider' ? '0 2px 4px rgba(0,0,0,0.05)' : 'none', transition: 'all 0.15s' }}>
               🎚️ Quality Slider
             </button>
           </div>
@@ -217,7 +237,7 @@ export default function ImageCompressor() {
                   { label: '💼 Job Forms (200KB)', val: '200' },
                   { label: '🖼️ Web Fast (500KB)', val: '500' }
                 ].map((chip, idx) => (
-                  <button key={idx} onClick={() => setManualTargetSize(chip.val)} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '0.3rem 0.75rem', fontSize: '0.75rem', fontWeight: '700', color: '#475569', cursor: 'pointer', transition: 'all 0.15s' }}>
+                  <button type="button" key={idx} onClick={() => setManualTargetSize(chip.val)} style={{ background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '0.3rem 0.75rem', fontSize: '0.75rem', fontWeight: '700', color: '#475569', cursor: 'pointer', transition: 'all 0.15s' }}>
                     {chip.label}
                   </button>
                 ))}
@@ -232,7 +252,7 @@ export default function ImageCompressor() {
             </div>
           )}
 
-          <button onClick={triggerCompression} disabled={!selectedFile} style={{ width: '100%', background: selectedFile ? 'linear-gradient(135deg, #4F46E5, #4338CA)' : '#cbd5e1', color: 'white', border: 'none', padding: '0.9rem', borderRadius: '12px', fontWeight: '700', cursor: selectedFile ? 'pointer' : 'not-allowed', boxShadow: selectedFile ? '0 4px 12px rgba(79, 70, 229, 0.2)' : 'none', transition: 'all 0.2s', marginTop: 'auto' }}>
+          <button type="button" onClick={triggerCompression} disabled={!selectedFile} style={{ width: '100%', background: selectedFile ? 'linear-gradient(135deg, #4F46E5, #4338CA)' : '#cbd5e1', color: 'white', border: 'none', padding: '0.9rem', borderRadius: '12px', fontWeight: '700', cursor: selectedFile ? 'pointer' : 'not-allowed', boxShadow: selectedFile ? '0 4px 12px rgba(79, 70, 229, 0.2)' : 'none', transition: 'all 0.2s', marginTop: 'auto' }}>
             Optimize File Capacity
           </button>
         </>
@@ -294,12 +314,12 @@ export default function ImageCompressor() {
 
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.25rem 0.5rem', marginTop: '0.25rem' }}>
               {/* Back Link to adjust configurations */}
-              <button onClick={() => setActiveStep('setup')} style={{ background: 'none', border: 'none', color: '#4f46e5', fontWeight: '700', fontSize: '0.85rem', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
+              <button type="button" onClick={() => setActiveStep('setup')} style={{ background: 'none', border: 'none', color: '#4f46e5', fontWeight: '700', fontSize: '0.85rem', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
                 ⚙️ Modify Settings
               </button>
 
               {/* Reset link to switch to an entirely different image payload */}
-              <button onClick={handleFullReset} style={{ background: 'none', border: 'none', color: '#64748b', fontWeight: '700', fontSize: '0.85rem', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
+              <button type="button" onClick={handleFullReset} style={{ background: 'none', border: 'none', color: '#64748b', fontWeight: '700', fontSize: '0.85rem', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}>
                 📁 Choose Different File
               </button>
             </div>
