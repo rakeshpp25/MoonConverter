@@ -516,10 +516,10 @@ export default function HomePage() {
               <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '2rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.01)', transition: 'transform 0.2s, box-shadow 0.2s', textAlign: 'left' }}
                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 10px 20px rgba(0,0,0,0.04)'; }}
                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.01)'; }}>
-                <span style={{ fontSize: '2.5rem', display: 'block', marginBottom: '1rem' }}>🖼️</span>
+                
                 <h3 style={{ margin: '0 0 0.5rem 0', color: '#0f172a', fontSize: '1.2rem', fontWeight: '800' }}>Advanced Image Compressor</h3>
                 <p style={{ margin: 0, color: '#64748b', fontSize: '0.88rem', lineHeight: '1.5' }}>Compress JPG, PNG, and WebP assets to an exact targeted size (KB) instantly.</p>
-                <span style={{ display: 'inline-block', marginTop: '1.25rem', color: '#4f46e5', fontWeight: '700', fontSize: '0.85rem' }}>Open Tool →</span>
+          
               </div>
             </Link>
 
@@ -528,10 +528,8 @@ export default function HomePage() {
               <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '20px', padding: '2rem', cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.01)', transition: 'transform 0.2s, box-shadow 0.2s', textAlign: 'left' }}
                    onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.boxShadow = '0 10px 20px rgba(0,0,0,0.04)'; }}
                    onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.01)'; }}>
-                <span style={{ fontSize: '2.5rem', display: 'block', marginBottom: '1rem' }}>📕</span>
                 <h3 style={{ margin: '0 0 0.5rem 0', color: '#0f172a', fontSize: '1.2rem', fontWeight: '800' }}>Secure PDF Compressor</h3>
                 <p style={{ margin: 0, color: '#64748b', fontSize: '0.88rem', lineHeight: '1.5' }}>Optimize multi-page documents using tiered quality profiles while keeping text sharp.</p>
-                <span style={{ display: 'inline-block', marginTop: '1.25rem', color: '#1e1b4b', fontWeight: '700', fontSize: '0.85rem' }}>Open Tool →</span>
               </div>
             </Link>
 
