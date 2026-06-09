@@ -77,6 +77,16 @@ export default function ImageCompressor() {
   const triggerCompression = async () => {
     if (!selectedFile) return;
 
+    // 🟢 1. MEMORY PURGE: Revoke old object links inside browser memory cache layers
+    if (compressedDownloadUrl) {
+      URL.revokeObjectURL(compressedDownloadUrl);
+      setCompressedDownloadUrl('');
+    }
+
+    // 🟢 2. STATE HARD PURGE: Wipe calculation object state before entering the processing pass
+    setOutputDetails({ sizeKb: 0, qualityUsed: 0, formatShifted: false });
+    setLiveSizeEstimate('');
+
     setActiveStep('processing');
     setProcessingPass(1);
     setErrorMessage('');
@@ -104,13 +114,19 @@ export default function ImageCompressor() {
         const outputBlob = new Blob([finalBuffer], { type: forcedFormatShift ? 'image/jpeg' : selectedFile.type });
         const downloadLinkUrl = URL.createObjectURL(outputBlob);
 
-        setCompressedDownloadUrl(downloadLinkUrl);
+        // 🟢 3. STATE SYNC: Set output specifications safely into storage first
         setOutputDetails({
           sizeKb: parseFloat(finalSizeKb),
           qualityUsed: qualityPercentageUsed,
           formatShifted: forcedFormatShift
         });
-        setActiveStep('success');
+        setCompressedDownloadUrl(downloadLinkUrl);
+        
+        // Delay view transition slightly to ensure React completes layout metrics compilation 
+        setTimeout(() => {
+          setActiveStep('success');
+        }, 40);
+
         workerRef.current.terminate(); 
       } 
       else if (status === 'error') {
@@ -123,6 +139,9 @@ export default function ImageCompressor() {
 
   // --- FULL HARD RESET ROUTINE ---
   const handleFullReset = () => {
+    if (compressedDownloadUrl) {
+      URL.revokeObjectURL(compressedDownloadUrl);
+    }
     setSelectedFile(null);
     setFileDetails({ name: '', sizeKb: 0, type: '' });
     setCompressedDownloadUrl('');
