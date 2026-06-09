@@ -77,19 +77,23 @@ export default function ImageCompressor() {
   const triggerCompression = async () => {
     if (!selectedFile) return;
 
-    // 🟢 CRITICAL CACHE BREAK 1: If an old thread is still running, kill it instantly
+    // 🟢 1. STATE LOCK: Capture clean integer from string immediately
+    // This physically prevents React from recalculating state parameters inside your input text layout!
+    const lockedTargetSize = Math.floor(parseFloat(manualTargetSize)) || 200;
+
+    // CRITICAL CACHE BREAK 1: If an old thread is still running, kill it instantly
     if (workerRef.current) {
       workerRef.current.terminate();
       workerRef.current = null;
     }
 
-    // 🟢 CRITICAL CACHE BREAK 2: Explicitly revoke previous Blob URLs to free browser heap RAM
+    // CRITICAL CACHE BREAK 2: Explicitly revoke previous Blob URLs to free browser heap RAM
     if (compressedDownloadUrl) {
       URL.revokeObjectURL(compressedDownloadUrl);
       setCompressedDownloadUrl('');
     }
 
-    // 🟢 CRITICAL CACHE BREAK 3: Wipe state parameters cleanly before switching to processing layout view
+    // CRITICAL CACHE BREAK 3: Wipe state parameters cleanly before switching to processing layout view
     setOutputDetails({ sizeKb: 0, qualityUsed: 0, formatShifted: false });
     setLiveSizeEstimate('');
 
@@ -103,13 +107,14 @@ export default function ImageCompressor() {
     // Read a fresh array buffer snapshot layer on every click trigger
     const fileArrayBuffer = await selectedFile.arrayBuffer();
 
+    // 🟢 2. TRANSPORTS: Send the locked data snapshot copy safely to the thread matrix
     workerRef.current.postMessage({
       fileBuffer: fileArrayBuffer,
       fileType: selectedFile.type,
       fileName: selectedFile.name,
       mode: compressionMode,
       qualitySliderValue: qualitySlider,
-      targetSizeKb: parseFloat(manualTargetSize) || 200
+      targetSizeKb: lockedTargetSize
     }); 
 
     workerRef.current.onmessage = function (e) {
