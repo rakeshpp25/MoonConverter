@@ -3,7 +3,7 @@
 // MoonConverter — Hybrid Tiered PDF Optimization & Rasterization Worker Engine
 // ============================================================================
 
-// 🟢 Use stable PDF.js v3 UMD core builds to guarantee standard Worker compatibility
+// Use stable PDF.js v3 UMD core builds to guarantee native Web Worker compatibility
 importScripts('https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js');
 importScripts('https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js');
 
@@ -88,7 +88,7 @@ async function analyzePdfStreamProperties(buffer) {
 
     for (const [ref, obj] of doc.context.indirectObjects.entries()) {
       if (obj instanceof PDFLib.PDFStream && obj.dict) {
-        // 🟢 FIXED: Follow proxy reference indicators safely if length property is an indirect block
+        // Follow proxy reference indicators safely if length property is an indirect block
         let lengthVal = obj.dict.get(PDFLib.PDFName.of('Length'));
         if (lengthVal instanceof PDFLib.PDFRef) {
           lengthVal = doc.context.lookup(lengthVal);
@@ -224,7 +224,7 @@ async function applyOptimizationPass(fileBuffer, opts, pdfType) {
       const infoRef = context.trailerInfo?.Info;
       if (infoRef) {
         const infoDict = context.lookup(infoRef);
-        if (infoDict instanceof PDFLib.PDFDict) { // 🟢 FIXED: Using PDFDict safely
+        if (infoDict instanceof PDFLib.PDFDict) { // Using standard PDFDict securely
           const keysToKeep = new Set(['/Producer', '/Creator']);
           for (const key of infoDict.keys()) {
             if (!keysToKeep.has(key.toString())) infoDict.delete(key);
@@ -301,7 +301,7 @@ async function optimizeIndividualImageStream(context, ref, stream, quality, dime
     const optimizedArrayBytes = new Uint8Array(await outputBlob.arrayBuffer());
     if (optimizedArrayBytes.length >= rawDataBytes.length) return;
 
-    // 🟢 FIXED: Purge memory buffers completely to break the `context.assign` data leak trap
+    // Purge memory references completely to bypass the context.assign data retention trap
     stream.contents = new Uint8Array(0);
     if (stream.dict) {
       for (const key of stream.dict.keys()) stream.dict.delete(key);
@@ -329,7 +329,7 @@ function executeMemorySafeDeduplication(context) {
     const referenceRemapMap = new Map();
 
     for (const [ref, obj] of context.indirectObjects.entries()) {
-      // 🟢 FIXED: Prevent large-object stringification crashes by processing dictionaries and skipping raw streams
+      // Prevent large-object stringification crashes by prioritizing dictionaries and skipping raw streams
       if (obj instanceof PDFLib.PDFDict) {
         let objectStringTrace = '';
         try { objectStringTrace = obj.toString(); } catch (_) { continue; }
@@ -371,12 +371,12 @@ async function executeAggressiveRasterizationPipeline(fileBuffer, targetSizeKb, 
   let productionBytes = null;
   let rasterBestKb = Infinity;
   
-  // 🟢 FIXED: Upgraded loop to 7 full iterations for maximum compression precision
+  // Upgraded loop configuration to 7 full iterations for maximum target precision
   for (let searchLoop = 0; searchLoop < 7; searchLoop++) {
     activePasses++;
     const testQuality = (rLowQuality + rHighQuality) / 2;
     
-    // 🟢 FIXED: Linked DPI adjustments directly to quality parameters for smoother file sizing
+    // Connect DPI resolution steps directly to quality changes
     const scaleFactor = (testQuality - RASTER_QUALITY_FLOOR) / (0.85 - RASTER_QUALITY_FLOOR);
     const rDPISelection = Math.floor(72 + (150 - 72) * scaleFactor);
     
@@ -401,20 +401,37 @@ async function executeAggressiveRasterizationPipeline(fileBuffer, targetSizeKb, 
         viewport: calculatedViewport
       }).promise;
 
-      let singlePageBlob;
+      let pageArrayBufferBytes;
       try {
-        // 🟢 FIXED: Implement efficient WebP compression first to optimize data usage
-        singlePageBlob = await renderingCanvas.convertToBlob({ type: 'image/webp', quality: testQuality });
+        // 1. COMPRESSION STAGE: Evaluate scaling bounds using high-efficiency WebP first
+        let singlePageBlob = await renderingCanvas.convertToBlob({ type: 'image/webp', quality: testQuality });
         
-        // Safety Fallback: Force JPEG encoding if browser silently outputs a standard PNG
+        // Handle environments where WebP canvas output falls back to standard PNGs
         if (singlePageBlob && singlePageBlob.type !== 'image/webp') {
           singlePageBlob = await renderingCanvas.convertToBlob({ type: 'image/jpeg', quality: testQuality });
+          pageArrayBufferBytes = await singlePageBlob.arrayBuffer();
+        } else {
+          // 2. TRANSCODING STAGE: WebP is supported. Extract WebP size metrics, 
+          // then transcode back to a compliant JPEG buffer for stable pdf-lib embedding.
+          const webpBytes = await singlePageBlob.arrayBuffer();
+          const webpBlob = new Blob([webpBytes], { type: 'image/webp' });
+          const webpBitmap = await self.createImageBitmap(webpBlob);
+          
+          const exportCanvas = new OffscreenCanvas(calculatedViewport.width, calculatedViewport.height);
+          const exportCtx = exportCanvas.getContext('2d', { alpha: false, desynchronized: true });
+          
+          exportCtx.drawImage(webpBitmap, 0, 0);
+          webpBitmap.close();
+          
+          const compliantJpgBlob = await exportCanvas.convertToBlob({ type: 'image/jpeg', quality: 0.94 });
+          pageArrayBufferBytes = await compliantJpgBlob.arrayBuffer();
         }
       } catch (_) {
-        singlePageBlob = await renderingCanvas.convertToBlob({ type: 'image/jpeg', quality: testQuality });
+        const fallbackJpgBlob = await renderingCanvas.convertToBlob({ type: 'image/jpeg', quality: testQuality });
+        pageArrayBufferBytes = await fallbackJpgBlob.arrayBuffer();
       }
 
-      const pageArrayBufferBytes = await singlePageBlob.arrayBuffer();
+      // Safe embedding pipeline execution using certified JPEG buffers
       const embeddedJpgInstance = await freshCompiledPdfDoc.embedJpg(pageArrayBufferBytes);
       const newPageLeafNode = freshCompiledPdfDoc.addPage([calculatedViewport.width, calculatedViewport.height]);
       
@@ -433,7 +450,7 @@ async function executeAggressiveRasterizationPipeline(fileBuffer, targetSizeKb, 
       rasterBestKb = testRasterKb;
     }
 
-    // 🟢 FIXED: Implement early exit check if search results land inside a clean 3% window
+    // Early exit check if search results land inside a clean 3% window
     if (Math.abs(testRasterKb - targetSizeKb) / targetSizeKb <= 0.03) {
       productionBytes = testRasterBytes;
       break;
