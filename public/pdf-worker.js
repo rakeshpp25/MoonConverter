@@ -3,12 +3,14 @@
 // MoonConverter — Hybrid Tiered PDF Optimization & Rasterization Worker Engine
 // ============================================================================
 
-// Use stable PDF.js v3 UMD core builds to guarantee native Web Worker compatibility
+// ─── Complete Library Script Imports ─────────────────────────────────────────
 importScripts('https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js');
-importScripts('https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js');
+// 🟢 FIX: Changed 'pdf.worker.min.js' to the correct unpkg asset track: 'pdf.worker.js'
+importScripts('https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.js');
 
-// Synchronize background thread rendering workers with the version 3 core layout
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+// ─── Core Hook Assignments ───────────────────────────────────────────────────
+// 🟢 FIX: Explicitly bind the global build context so pdfjsLib works without UI files
+const pdfjsLib = self['pdfjs-dist/build/pdf'] || self.pdfjsLib;
 
 // ─── Search Allocation Parameters ───────────────────────────────────────────
 const TOLERANCE_PCT        = 0.05;  // Target window variance threshold
