@@ -1,14 +1,15 @@
 // public/pdf-worker.js
 // ============================================================
-// MoonConverter — Hybrid Text-Preserving PDF Compression Engine
+// MoonConverter — Precision Hybrid PDF Compression Engine v3
 // ============================================================
 
 importScripts('https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js');
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const TOLERANCE_PCT     = 0.05;          // ±5 % of target is a "hit"
-const MAX_PASSES        = 8;             // hard cap on iterations
-const MIN_IMAGE_QUALITY = 0.18;          // never drop JPEG below 18 %
+const TOLERANCE_PCT     = 0.05;  // ±5% of target = success
+const MAX_PASSES        = 18;  // hard cap
+const MIN_IMAGE_QUALITY = 0.08;  // absolute floor for JPEG quality
+const MAX_IMAGE_QUALITY = 0.95;  // ceiling (avoid lossless PNG re-encoding)
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
 self.onmessage = async function (e) {
@@ -16,17 +17,15 @@ self.onmessage = async function (e) {
 
   try {
     post({ status: 'processing', pass: 0, message: 'Analysing PDF…' });
-
     const originalKb = fileBuffer.byteLength / 1024;
 
-    // Fast-track: already within target
-    if (mode === 'target' && originalKb <= targetSizeKb) {
+    // Already within target — just clean up and return
+    if (mode === 'target' && originalKb <= targetSizeKb * (1 + TOLERANCE_PCT)) {
       const doc   = await loadDoc(fileBuffer);
       const bytes = await saveDoc(doc, true);
-      return postDone(bytes, originalKb, 1, 'File already within target — light cleanup applied.');
+      return postDone(bytes, originalKb, 1, 'File was already at or below target — light cleanup applied.');
     }
 
-    // Detect content type
     post({ status: 'processing', pass: 0, message: 'Detecting content type…' });
     const pdfType = await analysePdfType(fileBuffer);
     post({ status: 'processing', pass: 0, message: `Detected: ${pdfType} PDF` });
@@ -71,169 +70,175 @@ async function saveDoc(doc, useObjectStreams = true) {
   return doc.save({ useObjectStreams });
 }
 
+function closerToTarget(kbA, kbB, targetKb) {
+  return Math.abs(kbA - targetKb) < Math.abs(kbB - targetKb);
+}
+
+function withinTolerance(kb, targetKb) {
+  return Math.abs(kb - targetKb) / targetKb <= TOLERANCE_PCT;
+}
+
+function postProgress(pass, kb, targetKb, message) {
+  post({
+    status:              'processing',
+    pass,
+    currentSizeEstimate: `${kb.toFixed(1)} KB`,
+    targetSizeKb:        targetKb,
+    message:             message ?? `Pass ${pass} — ${kb.toFixed(1)} KB`,
+  });
+}
+
 // ─── PDF type analyser ────────────────────────────────────────────────────────
 async function analysePdfType(fileBuffer) {
   try {
-    const doc       = await loadDoc(fileBuffer);
-    const context   = doc.context;
-    let imageBytes  = 0;
-    let streamTotal = 0;
+    const doc = await loadDoc(fileBuffer);
+    let imageBytes = 0, streamTotal = 0;
 
-    for (const [, obj] of context.enumerateIndirectObjects()) {
+    for (const [, obj] of doc.context.enumerateIndirectObjects()) {
       if (!(obj instanceof PDFLib.PDFRawStream)) continue;
-      const dict    = obj.dict;
-      const subtype = dict.get(PDFLib.PDFName.of('Subtype'));
-      const length  = dict.get(PDFLib.PDFName.of('Length'));
-      const bytes   = length instanceof PDFLib.PDFNumber ? length.asNumber() : 0;
-      streamTotal  += bytes;
-      if (subtype?.toString() === '/Image') imageBytes += bytes;
+      const dict  = obj.dict;
+      const len   = dict.get(PDFLib.PDFName.of('Length'));
+      const bytes = len instanceof PDFLib.PDFNumber ? len.asNumber() : 0;
+      streamTotal += bytes;
+      const sub = dict.get(PDFLib.PDFName.of('Subtype'));
+      if (sub?.toString() === '/Image') imageBytes += bytes;
     }
 
     if (streamTotal === 0) return 'text';
-    const ratio = imageBytes / streamTotal;
-    if (ratio > 0.80) return 'image';
-    if (ratio > 0.15) return 'mixed';
+    const r = imageBytes / streamTotal;
+    if (r > 0.70) return 'image';
+    if (r > 0.25) return 'mixed';
     return 'text';
   } catch (_) {
     return 'mixed';
   }
 }
 
-// ─── Profile mode ─────────────────────────────────────────────────────────────
-const PROFILE_SETTINGS = {
-  screen: { structureLevel: 7, imageQuality: 0.40, stripStructureTree: true  },
-  ebook:  { structureLevel: 5, imageQuality: 0.60, stripStructureTree: false },
-  print:  { structureLevel: 3, imageQuality: 0.80, stripStructureTree: false },
+// ─── Profile mode (no target) ─────────────────────────────────────────────────
+const PROFILE_OPTS = {
+  screen: { structLevel: 7, imageQuality: 0.40, stripStructTree: true  },
+  ebook:  { structLevel: 5, imageQuality: 0.60, stripStructTree: false },
+  print:  { structLevel: 3, imageQuality: 0.80, stripStructTree: false },
 };
 
 async function profileCompress(fileBuffer, profile, pdfType) {
-  const s     = PROFILE_SETTINGS[profile] ?? PROFILE_SETTINGS.ebook;
-  const opts = buildOptions(s.structureLevel, s.imageQuality, s.stripStructureTree);
+  const s     = PROFILE_OPTS[profile] ?? PROFILE_OPTS.ebook;
+  const opts  = buildOpts(s.structLevel, s.imageQuality, s.stripStructTree);
   const bytes = await runPass(fileBuffer, opts, pdfType, 1);
   return { bytes, passes: 1, note: '' };
 }
 
-// ─── Target / binary-search mode ─────────────────────────────────────────────
+// ─── TWO-PHASE TARGET COMPRESSION ────────────────────────────────────────────
 async function targetCompress(fileBuffer, targetKb, originalKb, pdfType) {
-  const ladder = buildStrategyLadder(pdfType);
   let bestBytes = null;
-  let bestKb    = originalKb;
+  let bestKb    = originalKb;  // Closest to target tracked here
   let passes    = 0;
-  let smallestDelta = Infinity;
 
-  // Pass 1 — gentlest configuration check
-  {
-    passes++;
-    post({ status: 'processing', pass: passes, message: 'Pass 1 — structural cleanup…' });
-    const bytes = await runPass(fileBuffer, ladder[0], pdfType, passes);
-    const kb    = bytes.byteLength / 1024;
-    postProgress(passes, kb, targetKb);
-    
-    bestBytes = bytes; bestKb = kb;
-    smallestDelta = Math.abs(kb - targetKb);
-    
-    if (hit(kb, targetKb)) return { bytes, passes, note: 'Target reached with minimal compression.' };
-  }
+  // ── PHASE A: Structural binary search ──────────────────────────────────────
+  const phaseAQuality = pdfType === 'text' ? 1.0 : MAX_IMAGE_QUALITY;
+  const structResults = new Array(8).fill(null);
 
-  // Pass 2 — most aggressive configuration check
-  const lastIdx = ladder.length - 1;
-  {
+  const getStructResult = async (level) => {
+    if (structResults[level]) return structResults[level];
     passes++;
-    post({ status: 'processing', pass: passes, message: 'Pass 2 — testing maximum compression…' });
-    const bytes = await runPass(fileBuffer, ladder[lastIdx], pdfType, passes);
+    const opts  = buildOpts(level, phaseAQuality, level >= 7);
+    const bytes = await runPass(fileBuffer, opts, pdfType, passes);
     const kb    = bytes.byteLength / 1024;
-    postProgress(passes, kb, targetKb);
-    
-    const delta = Math.abs(kb - targetKb);
-    if (delta < smallestDelta) {
-      smallestDelta = delta;
+    postProgress(passes, kb, targetKb, `Phase A — structural level ${level}`);
+
+    if (bestBytes === null || closerToTarget(kb, bestKb, targetKb)) {
       bestBytes = bytes; bestKb = kb;
     }
-    if (hit(kb, targetKb)) return { bytes, passes, note: 'Target reached.' };
-  }
-
-  // Bidirectional search loop across the strategy ladder indexes
-  let lo = 1, hi = lastIdx - 1;
-  while (lo <= hi && passes < MAX_PASSES) {
-    const mid = (lo + hi) >> 1;
-    passes++;
-    post({ status: 'processing', pass: passes, message: `Pass ${passes} — refining target sizes…` });
-    const bytes = await runPass(fileBuffer, ladder[mid], pdfType, passes);
-    const kb    = bytes.byteLength / 1024;
-    postProgress(passes, kb, targetKb);
-
-    const delta = Math.abs(kb - targetKb);
-    
-    // Track the absolute closest configuration pass available
-    if (delta < smallestDelta) {
-      smallestDelta = delta;
-      bestBytes = bytes; bestKb = kb;
-    }
-
-    if (hit(kb, targetKb)) {
-      return { bytes, passes, note: 'Target reached.' };
-    }
-    
-    // Adjust logic boundaries based on file output metrics weight
-    if (kb > targetKb) {
-      lo = mid + 1; // Too large -> step up to more aggressive strategies
-    } else {
-      hi = mid - 1; // Too small -> step back down to gentler strategies
-    }
-  }
-
-  return {
-    bytes: bestBytes,
-    passes,
-    note: bestKb > targetKb * (1 + TOLERANCE_PCT)
-      ? `Closest achieved: ${bestKb.toFixed(1)} KB (target: ${targetKb} KB).`
-      : 'Target optimized closely to specifications.',
+    structResults[level] = { bytes, kb };
+    return structResults[level];
   };
+
+  const r0 = await getStructResult(0);
+  if (withinTolerance(r0.kb, targetKb)) return { bytes: r0.bytes, passes, note: '' };
+  if (r0.kb <= targetKb) return { bytes: r0.bytes, passes, note: 'Target reached with minimal compression.' };
+
+  const r7 = await getStructResult(7);
+  if (withinTolerance(r7.kb, targetKb)) return { bytes: r7.bytes, passes, note: '' };
+
+  if (pdfType === 'text' && r7.kb > targetKb) {
+    return {
+      bytes: bestBytes, passes,
+      note: `Best achieved: ${bestKb.toFixed(1)} KB. Text PDFs cannot be compressed further without rasterization.`,
+    };
+  }
+
+  // Bracket setups
+  let aboveLevel = r0.kb > targetKb ? 0 : -1;
+  let belowLevel = r7.kb <= targetKb ? 7 : -1;
+
+  let lo = 1, hi = 6;
+  while (lo <= hi && passes < MAX_PASSES - 5) {
+    const mid = (lo + hi) >> 1;
+    const r   = await getStructResult(mid);
+    if (withinTolerance(r.kb, targetKb)) return { bytes: r.bytes, passes, note: '' };
+
+    if (r.kb > targetKb) {
+      if (aboveLevel === -1 || mid > aboveLevel) aboveLevel = mid;
+      lo = mid + 1;
+    } else {
+      // 🟢 FIXED: Target the highest available level under the ceiling to avoid file destruction
+      if (belowLevel === -1 || mid > belowLevel) belowLevel = mid;
+      hi = mid - 1;
+    }
+  }
+
+  // ── PHASE B: Image quality fine-tuning ────────────────────────────────────
+  if (pdfType !== 'text') {
+    // 🟢 FIXED: If no level stayed above the target, fall back onto level 7 to compress images out of it
+    const structLevelForPhaseB = aboveLevel !== -1 ? aboveLevel : 7;
+    post({ status: 'processing', pass: passes, message: `Phase B — fine-tuning image quality at structural tier ${structLevelForPhaseB}…` });
+
+    let qLo = MIN_IMAGE_QUALITY;
+    let qHi = MAX_IMAGE_QUALITY;
+
+    while ((qHi - qLo) > 0.03 && passes < MAX_PASSES) {
+      const qMid  = (qLo + qHi) / 2;
+      passes++;
+      const opts  = buildOpts(structLevelForPhaseB, qMid, structLevelForPhaseB >= 7);
+      const bytes = await runPass(fileBuffer, opts, pdfType, passes);
+      const kb    = bytes.byteLength / 1024;
+      postProgress(passes, kb, targetKb, `Phase B — quality ${(qMid * 100).toFixed(0)}%`);
+
+      if (closerToTarget(kb, bestKb, targetKb)) { bestBytes = bytes; bestKb = kb; }
+      if (withinTolerance(kb, targetKb)) return { bytes, passes, note: '' };
+
+      if (kb > targetKb) qLo = qMid;  // Too large -> lower quality
+      else               qHi = qMid;  // Too small -> elevate quality
+    }
+  }
+
+  // ── Final note ────────────────────────────────────────────────────────────
+  const note = withinTolerance(bestKb, targetKb)
+    ? ''
+    : bestKb > targetKb
+      ? `Closest: ${bestKb.toFixed(1)} KB (target: ${targetKb} KB). The PDF may contain incompressible streams.`
+      : `Closest: ${bestKb.toFixed(1)} KB (target: ${targetKb} KB). Stopped to avoid over-compressing.`;
+
+  return { bytes: bestBytes, passes, note };
 }
 
-function hit(kb, targetKb) {
-  return kb <= targetKb * (1 + TOLERANCE_PCT) && kb >= targetKb * (1 - TOLERANCE_PCT);
-}
-
-function postProgress(pass, kb, targetKb) {
-  post({ status: 'processing', pass, currentSizeEstimate: `${kb.toFixed(1)} KB`, targetSizeKb: targetKb });
-}
-
-// ─── Strategy ladder ──────────────────────────────────────────────────────────
-function buildStrategyLadder(pdfType) {
-  const isText = pdfType === 'text';
-  const Q = isText
-    ? Array(8).fill(1.0)
-    : [0.90, 0.80, 0.68, 0.55, 0.45, 0.35, 0.25, MIN_IMAGE_QUALITY];
-
-  return [
-    buildOptions(0, Q[0], false),
-    buildOptions(1, Q[1], false),
-    buildOptions(2, Q[2], false),
-    buildOptions(3, Q[3], false),
-    buildOptions(4, Q[4], false),
-    buildOptions(5, Q[5], false),
-    buildOptions(6, Q[6], false),
-    buildOptions(7, Q[7], true),
-  ];
-}
-
-function buildOptions(level, imageQuality, stripStructureTree) {
+// ─── Options builder ──────────────────────────────────────────────────────────
+function buildOpts(structLevel, imageQuality, stripStructureTree) {
   return {
-    useObjectStreams:       level >= 0,
-    stripThumbnails:       level >= 1,
-    removeMetadata:        level >= 2,
-    deduplicateObjects:    level >= 3,
-    stripAnnotationAP:     level >= 4,
-    stripUnusedResources:  level >= 5,
-    stripPageLabels:       level >= 6,
-    stripJavaScript:       level >= 6,
-    stripStructureTree,
+    useObjectStreams:      true,
+    stripThumbnails:       structLevel >= 1,
+    removeMetadata:        structLevel >= 2,
+    deduplicateObjects:    structLevel >= 3,
+    stripAnnotationAP:     structLevel >= 4,
+    stripUnusedResources:  structLevel >= 5,
+    stripPageLabels:       structLevel >= 6,
+    stripJavaScript:       structLevel >= 6,
+    stripStructureTree:    !!stripStructureTree,
     imageQuality,
   };
 }
 
-// ─── Core compression pass ────────────────────────────────────────────────────
+// ─── Core pass ────────────────────────────────────────────────────────────────
 async function runPass(fileBuffer, opts, pdfType, passNum) {
   const doc     = await loadDoc(fileBuffer);
   const context = doc.context;
@@ -247,14 +252,14 @@ async function runPass(fileBuffer, opts, pdfType, passNum) {
   if (opts.stripStructureTree)   stripStructureTree(doc);
   if (opts.deduplicateObjects)   deduplicateObjects(context);
 
-  if (pdfType !== 'text' && opts.imageQuality < 1.0) {
+  if (pdfType !== 'text' && opts.imageQuality < MAX_IMAGE_QUALITY) {
     await recompressJpegStreams(context, opts.imageQuality);
   }
 
   return saveDoc(doc, opts.useObjectStreams);
 }
 
-// ─── Structural optimisation helpers ─────────────────────────────────────────
+// ─── Structural helpers ───────────────────────────────────────────────────────
 function removeMetadata(doc, context) {
   try {
     const infoRef = context.trailerInfo?.Info;
@@ -331,7 +336,6 @@ function stripStructureTree(doc) {
   try { doc.catalog.delete(PDFLib.PDFName.of('MarkInfo'));        } catch (_) {}
 }
 
-// ─── Object deduplication ─────────────────────────────────────────────────────
 function deduplicateObjects(context) {
   try {
     const seen  = new Map();
@@ -342,16 +346,11 @@ function deduplicateObjects(context) {
       let key;
       try { key = obj.toString(); } catch (_) { continue; }
       if (!key || key.length < 16) continue;
-
-      if (seen.has(key)) {
-        remap.set(ref.toString(), seen.get(key));
-      } else {
-        seen.set(key, ref);
-      }
+      if (seen.has(key)) remap.set(ref.toString(), seen.get(key));
+      else               seen.set(key, ref);
     }
 
     if (remap.size === 0) return;
-
     for (const [, obj] of context.enumerateIndirectObjects()) {
       try { remapRefs(obj, remap); } catch (_) {}
     }
@@ -361,89 +360,63 @@ function deduplicateObjects(context) {
 function remapRefs(obj, remap) {
   if (obj instanceof PDFLib.PDFDict) {
     for (const [k, v] of obj.entries()) {
-      const c = remap.get(v?.toString?.());
-      if (c)  obj.set(k, c);
-      else    remapRefs(v, remap);
+      const c = v instanceof PDFLib.PDFRef ? remap.get(v.toString()) : null;
+      if (c) obj.set(k, c); else remapRefs(v, remap);
     }
   } else if (obj instanceof PDFLib.PDFArray) {
     for (let i = 0; i < obj.size(); i++) {
       const v = obj.get(i);
-      const c = v instanceof PDFLib.PDFRef ? remap.get(v.toString()) : null;
-      if (c)  obj.set(i, c);
-      else    remapRefs(v, remap);
+      const c = v instanceof PDFRef ? remap.get(v.toString()) : null;
+      if (c) obj.set(i, c); else remapRefs(v, remap);
     }
   }
 }
 
-// ─── JPEG image stream re-compression ────────────────────────────────────────
+// ─── JPEG re-compression ──────────────────────────────────────────────────────
 async function recompressJpegStreams(context, quality) {
   const tasks = [];
 
   for (const [ref, obj] of context.enumerateIndirectObjects()) {
     if (!(obj instanceof PDFLib.PDFRawStream)) continue;
-    const dict    = obj.dict;
-    const subtype = dict.get(PDFLib.PDFName.of('Subtype'));
-    if (subtype?.toString() !== '/Image') continue;
-
-    const filter = dict.get(PDFLib.PDFName.of('Filter'));
-    if (filter?.toString() !== '/DCTDecode') continue;
-
-    const imgMask = dict.get(PDFLib.PDFName.of('ImageMask'));
-    if (imgMask?.toString() === 'true') continue;
-
+    const dict = obj.dict;
+    if (dict.get(PDFLib.PDFName.of('Subtype'))?.toString() !== '/Image') continue;
+    if (dict.get(PDFLib.PDFName.of('Filter'))?.toString()  !== '/DCTDecode') continue;
+    if (dict.get(PDFLib.PDFName.of('ImageMask'))?.toString() === 'true') continue;
     if (obj.contents.length < 2048) continue;
-
     tasks.push({ ref, obj, dict });
   }
 
   const BATCH = 4;
   for (let i = 0; i < tasks.length; i += BATCH) {
-    await Promise.all(tasks.slice(i, i + BATCH).map(t => recompressOneImage(context, t, quality)));
-    await yieldToEventLoop();
+    await Promise.all(tasks.slice(i, i + BATCH).map(t => recompressOne(context, t, quality)));
+    await new Promise(r => setTimeout(r, 0));
   }
 }
 
-async function recompressOneImage(context, { ref, obj, dict }, quality) {
+async function recompressOne(context, { ref, obj, dict }, quality) {
   try {
     const blob   = new Blob([obj.contents], { type: 'image/jpeg' });
     const bitmap = await createImageBitmap(blob).catch(() => null);
     if (!bitmap) return;
-    if (bitmap.width < 100 || bitmap.height < 100) {
-      bitmap.close();
-      return;
-    }
 
     const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-    const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
-    ctx.drawImage(bitmap, 0, 0);
+    canvas.getContext('2d').drawImage(bitmap, 0, 0);
     bitmap.close();
 
     const newBlob  = await canvas.convertToBlob({ type: 'image/jpeg', quality });
     if (!newBlob) return;
-
     const newBytes = new Uint8Array(await newBlob.arrayBuffer());
-
-    if (newBytes.length > obj.contents.length * 0.98) return;
-
-    const cs  = dict.get(PDFLib.PDFName.of('ColorSpace'))      ?? PDFLib.PDFName.of('DeviceRGB');
-    const bpc = dict.get(PDFLib.PDFName.of('BitsPerComponent')) ?? PDFLib.PDFNumber.of(8);
-    const w   = dict.get(PDFLib.PDFName.of('Width'));
-    const h   = dict.get(PDFLib.PDFName.of('Height'));
+    if (newBytes.length >= obj.contents.length) return;
 
     const newStream = context.stream(newBytes, {
       Type:             PDFLib.PDFName.of('XObject'),
       Subtype:          PDFLib.PDFName.of('Image'),
-      Width:            w,
-      Height:           h,
-      ColorSpace:       cs,
-      BitsPerComponent: bpc,
+      Width:            dict.get(PDFLib.PDFName.of('Width')),
+      Height:           dict.get(PDFLib.PDFName.of('Height')),
+      ColorSpace:       dict.get(PDFLib.PDFName.of('ColorSpace')) ?? PDFLib.PDFName.of('DeviceRGB'),
+      BitsPerComponent: dict.get(PDFLib.PDFName.of('BitsPerComponent')) ?? PDFLib.PDFNumber.of(8),
       Filter:           PDFLib.PDFName.of('DCTDecode'),
     });
-
     context.assign(ref, newStream);
   } catch (_) {}
-}
-
-function yieldToEventLoop() {
-  return new Promise(r => setTimeout(r, 0));
 }
