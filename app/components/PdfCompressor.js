@@ -13,7 +13,7 @@ export default function PdfCompressor() {
 
   // --- UI CONTROLLER STATES ---
   const [compressionMode, setCompressionMode] = useState('target'); // 'target' or 'profile'
-  const [optimizationProfile, setOptimizationProfile] = useState('recommended'); 
+  const [optimizationProfile, setOptimizationProfile] = useState('ebook'); // Matches worker object keys: 'screen', 'ebook', 'print'
   const [manualTargetSize, setManualTargetSize] = useState('500'); // Default target 500 KB for PDFs
   
   // --- PROCESSING ENGINE STATES ---
@@ -98,8 +98,7 @@ export default function PdfCompressor() {
     // Spawn the fresh high-speed worker instance
     workerRef.current = new Worker('/pdf-worker.js');
     
-    // 🟢 SAFETIES: Add an absolute time threshold trap. If a browser takes too long,
-    // it falls back to setup safely so the interface never crashes or locks up.
+    // SAFETIES: Hardware cutoff safety net
     const processingTimeoutTracker = setTimeout(() => {
       if (workerRef.current && activeStep === 'processing') {
         workerRef.current.terminate();
@@ -107,33 +106,37 @@ export default function PdfCompressor() {
         setErrorMessage('This complex document is highly compressed or protected. Try using a preset profile mode instead.');
         setActiveStep('setup');
       }
-    }, 45000); // 45-second hardware cutoff safety net
+    }, 45000);
 
     const fileArrayBuffer = await selectedFile.arrayBuffer();
 
+    // 🟢 TRANSPORTS: Pack variables and utilize Transferables to skip deep copying overheads
     workerRef.current.postMessage({
       fileBuffer: fileArrayBuffer,
       fileName: selectedFile.name,
       mode: compressionMode,
       profile: optimizationProfile,
       targetSizeKb: lockedTargetSize
-    });
+    }, [fileArrayBuffer]);
 
     workerRef.current.onmessage = function (e) {
-      const { status, pass, currentSizeEstimate, finalBuffer, finalSizeKb, message } = e.data;
+      const { status, pass, currentSizeEstimate, message, outputBuffer, finalSizeKb, originalSizeKb, note } = e.data;
 
       if (status === 'processing') {
         setProcessingPass(pass);
-        setLiveSizeEstimate(currentSizeEstimate);
+        // Intercept both string status messages and size updates gracefully
+        setLiveSizeEstimate(message || currentSizeEstimate || '');
       } 
-      else if (status === 'success') {
-        clearTimeout(processingTimeoutTracker); // Clear timeout safety instantly on success
+      // 🟢 HANDLERS: Changed listener hook from 'success' to 'done' to align with the hybrid engine
+      else if (status === 'done') {
+        clearTimeout(processingTimeoutTracker); 
         
-        const outputBlob = new Blob([finalBuffer], { type: 'application/pdf' });
+        // Unpack payload from outputBuffer
+        const outputBlob = new Blob([outputBuffer], { type: 'application/pdf' });
         const downloadLinkUrl = URL.createObjectURL(outputBlob);
 
         const savedSize = parseFloat(finalSizeKb);
-        const originalSize = fileDetails.sizeKb;
+        const originalSize = parseFloat(originalSizeKb) || fileDetails.sizeKb;
         const reductionPercent = Math.round(((originalSize - savedSize) / originalSize) * 100);
 
         setOutputDetails({
@@ -160,6 +163,7 @@ export default function PdfCompressor() {
       }
     };
   };
+
   // --- FULL HARD RESET ROUTINE ---
   const handleFullReset = () => {
     if (compressedDownloadUrl) {
@@ -168,7 +172,7 @@ export default function PdfCompressor() {
     setSelectedFile(null);
     setFileDetails({ name: '', sizeKb: 0 });
     setCompressedDownloadUrl('');
-    setOptimizationProfile('recommended');
+    setOptimizationProfile('ebook');
     setManualTargetSize('500');
     setCompressionMode('target');
     setActiveStep('setup');
@@ -232,9 +236,10 @@ export default function PdfCompressor() {
                 onChange={(e) => setOptimizationProfile(e.target.value)}
                 style={{ width: '100%', padding: '0.75rem 0.85rem', borderRadius: '10px', border: '1px solid #cbd5e1', fontSize: '0.95rem', fontWeight: '700', outline: 'none', color: '#0f172a', background: '#ffffff', cursor: 'pointer' }}
               >
-                <option value="recommended">Recommended Mode (Isolate Text & Keep Razor Sharp)</option>
-                <option value="maximum">Maximum Downsample Crunch (Compress Heavy Image Scan Layers)</option>
-                <option value="low">Low Optimization (Lossless Structural Deflate & Metadata Scrub)</option>
+                {/* 🟢 FIXED: Options value tags now directly align with PROFILES lookup indices inside worker */}
+                <option value="screen">Web Screen Optimization (Aggressive structural strip)</option>
+                <option value="ebook">E-Book Quality Preset (Balanced vector composition)</option>
+                <option value="print">High-Grade Print Mode (Preserves advanced resource indices)</option>
               </select>
             </div>
           ) : (
@@ -288,7 +293,7 @@ export default function PdfCompressor() {
           </div>
           {liveSizeEstimate && (
             <div style={{ background: '#f5f5f7', padding: '0.5rem 1rem', borderRadius: '20px', fontSize: '0.8rem', color: '#1e1b4b', fontWeight: '700', border: '1px solid #e2e8f0' }}>
-              Current object pass weight trace: {liveSizeEstimate} (Cycle pass {processingPass})
+              Status updates: {liveSizeEstimate} {compressionMode === 'target' && processingPass > 0 && `(Pass ${processingPass})`}
             </div>
           )}
         </div>
