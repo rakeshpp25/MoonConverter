@@ -7,14 +7,20 @@
 importScripts('https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js');
 
 // 🟢 FIX: Load the core worker script FIRST so it binds safely to the worker global scope
+// public/pdf-worker.js
+// ============================================================================
+// MoonConverter — Hybrid Tiered PDF Optimization & Rasterization Worker Engine
+// ============================================================================
+
+// ─── Complete Library Script Imports ─────────────────────────────────────────
+importScripts('https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js');
+
+// 🟢 FIX: Load ONLY the dedicated worker core script to banish DOM/createElement calls
 importScripts('https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.js');
 
-// 🟢 FIX: Load the standard UI file SECOND—it will now detect the worker scope and expose 'getDocument' safely!
-importScripts('https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js');
-
 // ─── Core Hook Assignments ───────────────────────────────────────────────────
-// 🟢 FIX: Re-verify that global names map correctly across the browser context
-const pdfjsLib = self.pdfjsLib || self['pdfjs-dist/build/pdf'];
+// 🟢 FIX: Create a direct namespace bridge to ensure getDocument resolves natively
+const pdfjsLib = self.pdfjsLib || self['pdfjs-dist/build/pdf'] || globalThis.pdfjsLib;
 
 // ─── Search Allocation Parameters ───────────────────────────────────────────
 const TOLERANCE_PCT        = 0.05;  // Target window variance threshold
